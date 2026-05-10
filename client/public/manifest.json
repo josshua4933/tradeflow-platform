@@ -1,0 +1,39 @@
+{
+  "name": "TradeFlow — Advanced Trading Platform",
+  "short_name": "TradeFlow",
+  "description": "Professional multi-asset trading platform for Forex, Crypto, Commodities, and Derivatives",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f0e8",
+  "theme_color": "#1a1a1a",
+  "orientation": "any",
+  "categories": ["finance", "business"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Trade",
+      "short_name": "Trade",
+      "description": "Open the trading terminal",
+      "url": "/trade"
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View your portfolio dashboard",
+      "url": "/dashboard"
+    },
+    {
+      "name": "Wallets",
+      "short_name": "Wallets",
+      "description": "Manage your wallets",
+      "url": "/wallets"
+    }
+  ]
+}
