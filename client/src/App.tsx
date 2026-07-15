@@ -22,6 +22,7 @@ import RiskDisclosurePage from "./pages/RiskDisclosurePage";
 import AmlPolicyPage from "./pages/AmlPolicyPage";
 import AuditPage from "./pages/AuditPage";
 import EducationPage from "./pages/EducationPage";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function Router() {
   return (
@@ -32,6 +33,9 @@ function Router() {
       <Route path="/risk-disclosure" component={RiskDisclosurePage} />
       <Route path="/aml-policy" component={AmlPolicyPage} />
       <Route path="/education" component={EducationPage} />
+
+      {/* Admin */}
+      <Route path="/admin" component={AdminDashboard} />
 
       {/* App — protected by DashboardLayout internally */}
       <Route path="/dashboard" component={Dashboard} />

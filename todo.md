@@ -68,3 +68,22 @@
 - [x] Mobile responsive design
 - [x] Vitest unit tests (42 tests, 2 test files, all passing)
 - [x] Final checkpoint and delivery
+
+
+## Phase 9: Admin Dashboard (NEW)
+- [ ] Admin router: getAllUsers, getUserDetails, updateUserStatus
+- [ ] Admin router: getAllDeposits, getDepositDetails, confirmDeposit
+- [ ] Admin router: getAllWithdrawals, approveWithdrawal, rejectWithdrawal
+- [ ] Admin router: getAllKycDocuments, approveKyc, rejectKyc
+- [ ] Admin router: getAllTrades, getTradingStats
+- [ ] Admin router: getPlatformAnalytics (total deposits, withdrawals, users, volume)
+- [ ] Admin router: manageNotifications (send system-wide alerts)
+- [ ] Admin page: Users management table with filters
+- [ ] Admin page: Deposits tracking with approval workflow
+- [ ] Admin page: Withdrawals management with approve/reject
+- [ ] Admin page: KYC documents review with approval
+- [ ] Admin page: Trading activity monitor
+- [ ] Admin page: Platform analytics dashboard
+- [ ] Role-gating: /admin route protected to admin users only
+- [ ] Update owner user to admin role
+- [ ] Test admin workflows

@@ -8,6 +8,7 @@ import { marketRouter } from "./routers/market";
 import { notificationsRouter } from "./routers/notifications";
 import { socialRouter } from "./routers/social";
 import { tradingRouter } from "./routers/trading";
+import { adminRouter } from "./routers/admin";
 import { getAuditLog, getAssistantMessages } from "./db";
 
 export const appRouter = router({
@@ -28,6 +29,7 @@ export const appRouter = router({
   social: socialRouter,
   notifications: notificationsRouter,
   assistant: assistantRouter,
+  admin: adminRouter,
 
   // Audit log (admin + own)
   audit: router({
