@@ -9,7 +9,7 @@ import {
   LayoutDashboard, TrendingUp, Wallet, History, Users, Zap,
   Calendar, MessageSquare, Bell, User, LogOut, Settings,
   BarChart2, Award, BookOpen, Link2, FileText, Shield,
-  ChevronDown, Menu, X, AlertTriangle
+  ChevronDown, Menu, X, AlertTriangle, Lock
 } from "lucide-react";
 
 interface NavItem {
@@ -19,7 +19,13 @@ interface NavItem {
   badge?: string;
 }
 
-const navGroups = [
+const getNavGroups = (isAdmin: boolean) => [
+  ...(isAdmin ? [{
+    title: "Admin",
+    items: [
+      { icon: <Lock className="h-4 w-4" />, label: "Admin Dashboard", href: "/admin" },
+    ],
+  }] : []),
   {
     title: "Trading",
     items: [
@@ -182,7 +188,7 @@ export default function TradingLayout({ children }: { children: React.ReactNode 
           `}
         >
           <div className="flex-1 overflow-y-auto py-4 px-2">
-            {navGroups.map((group) => (
+            {getNavGroups(user?.role === "admin").map((group) => (
               <div key={group.title} className="mb-5">
                 <div className="px-3 mb-1.5">
                   <span className="text-[10px] tracking-[0.15em] uppercase text-[oklch(0.45_0.012_75)] font-medium">
