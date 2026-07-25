@@ -4,7 +4,8 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { getDb, getWalletsByUserId, updateWalletBalance, createNotification } from "../db";
 import { users, transactions, trades, kycDocuments, auditLog } from "../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
-import { createPayplusPayout } from "../payplus";
+import { createPalPlussWithdrawal } from "../payplus";
+
 
 const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   if (ctx.user.role !== "admin") {
@@ -180,19 +181,28 @@ export const adminRouter = router({
         .set({ status: "processing" })
         .where(eq(transactions.id, input.transactionId));
 
-      // Trigger PalPlus payout
+      // Trigger PalPlus withdrawal
       try {
-        const payout = await createPayplusPayout({
+        // Get user details for phone number
+        const userRows = await db.select().from(users).where(eq(users.id, transaction.userId)).limit(1);
+        const user = userRows[0];
+
+        if (!user || !user.phone) {
+          throw new Error("User phone number not found");
+        }
+
+        const withdrawalRef = `TF-WD-${transaction.userId}-${Date.now()}`;
+        const withdrawal = await createPalPlussWithdrawal({
           amount: parseFloat(transaction.amount),
-          currency: transaction.currency,
           userId: transaction.userId,
-          userEmail: "",
+          phoneNumber: user.phone,
+          accountReference: withdrawalRef,
         });
 
-        // Store payout reference
+        // Store withdrawal reference
         await db
           .update(transactions)
-          .set({ reference: payout.payoutId })
+          .set({ reference: withdrawal.transactionId })
           .where(eq(transactions.id, input.transactionId));
 
         // Send notification
@@ -201,7 +211,7 @@ export const adminRouter = router({
           type: "withdrawal_update",
           title: "Withdrawal Approved",
           message: `Your withdrawal of ${transaction.amount} ${transaction.currency} has been approved and is being processed.`,
-          metadata: { transactionId: input.transactionId, payoutId: payout.payoutId },
+          metadata: { transactionId: input.transactionId, withdrawalId: withdrawal.transactionId },
         });
       } catch (error) {
         console.error("[Admin] Error initiating payout:", error);

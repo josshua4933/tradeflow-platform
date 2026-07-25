@@ -1,90 +1,62 @@
 import axios from "axios";
 
-// Payplus configuration
-const PAYPLUS_API_KEY = process.env.PAYPLUS_API_KEY || "";
-const PAYPLUS_SECRET_KEY = process.env.PAYPLUS_SECRET_KEY || "";
-const PAYPLUS_WEBHOOK_SECRET = process.env.PAYPLUS_WEBHOOK_SECRET || "";
-const PAYPLUS_BASE_URL = "https://api.payplus.io";
+// PalPluss configuration
+const PALPLUSS_API_KEY = process.env.PALPLUSS_API_KEY || "";
+const PALPLUSS_WEBHOOK_SECRET = process.env.PALPLUSS_WEBHOOK_SECRET || "";
+const PALPLUSS_BASE_URL = "https://api.palpluss.com";
 
-interface PayplusDepositRequest {
+interface PalPlussSTKPushRequest {
   amount: number;
-  currency: string;
-  userId: number;
-  userEmail: string;
-  userName: string;
-  returnUrl: string;
-  notifyUrl: string;
-}
-
-interface PayplusSTKPushRequest {
-  amount: number;
-  currency: string;
   userId: number;
   phoneNumber: string;
-  userEmail: string;
-  userName: string;
-  notifyUrl: string;
+  accountReference: string;
 }
 
-interface PayplusWithdrawalRequest {
-  amount: number;
-  currency: string;
-  userId: number;
-  userEmail: string;
-  accountNumber?: string;
-  bankCode?: string;
-}
-
-interface PayplusResponse {
+interface PalPlussResponse {
   success: boolean;
   transactionId?: string;
-  checkoutUrl?: string;
-  payoutId?: string;
   status?: string;
   error?: string;
 }
 
 /**
- * Create a Payplus STK push for mobile deposits
+ * Create a PalPluss STK push for M-Pesa deposits
+ * Sends STK prompt to user's phone for payment
  */
-export async function createPayplusSTKPush(
-  req: PayplusSTKPushRequest
-): Promise<PayplusResponse> {
+export async function createPalPlussSTKPush(
+  req: PalPlussSTKPushRequest
+): Promise<PalPlussResponse> {
   try {
-    if (!PAYPLUS_API_KEY || !PAYPLUS_SECRET_KEY) {
-      console.error("[Payplus] Missing API credentials");
+    if (!PALPLUSS_API_KEY) {
+      console.error("[PalPluss] Missing API credentials");
       return {
         success: false,
         error: "Payment gateway not configured",
       };
     }
 
-    // Create STK push request to Payplus
+    // Encode API key for Basic Authentication
+    const basicAuth = Buffer.from(`${PALPLUSS_API_KEY}:`).toString("base64");
+
+    console.log(`[PalPluss] Initiating STK push for user ${req.userId}, phone: ${req.phoneNumber}, amount: ${req.amount}`);
+
+    // Create STK push request to PalPluss
     const response = await axios.post(
-      `${PAYPLUS_BASE_URL}/v1/payments/stk-push`,
+      `${PALPLUSS_BASE_URL}/v1/payments/stk`,
       {
-        amount: Math.round(req.amount * 100), // Convert to cents
-        currency: req.currency || "USD",
-        phoneNumber: req.phoneNumber,
-        description: `TradeFlow Deposit - User ${req.userId}`,
-        customer: {
-          email: req.userEmail,
-          name: req.userName,
-          phoneNumber: req.phoneNumber,
-        },
-        metadata: {
-          userId: req.userId,
-          type: "deposit",
-        },
-        notifyUrl: req.notifyUrl,
+        phone: req.phoneNumber,
+        amount: req.amount,
+        accountReference: req.accountReference,
       },
       {
         headers: {
-          Authorization: `Bearer ${PAYPLUS_API_KEY}`,
+          Authorization: `Basic ${basicAuth}`,
           "Content-Type": "application/json",
         },
       }
     );
+
+    console.log(`[PalPluss] STK push response:`, response.data);
 
     if (response.data && response.data.transactionId) {
       return {
@@ -99,193 +71,109 @@ export async function createPayplusSTKPush(
       error: "Failed to initiate STK push",
     };
   } catch (error: any) {
-    console.error("[Payplus STK Push Error]", error.message);
+    console.error("[PalPluss STK Push Error]", error.response?.data || error.message);
     return {
       success: false,
-      error: error.message || "STK push failed",
+      error: error.response?.data?.error || error.message || "STK push failed",
     };
   }
 }
 
 /**
- * Create a Payplus deposit/payment session (legacy checkout method)
+ * Verify PalPluss webhook signature
  */
-export async function createPayplusDeposit(
-  req: PayplusDepositRequest
-): Promise<PayplusResponse> {
+export function verifyPalPlussWebhook(payload: string, signature: string): boolean {
   try {
-    // Validate required fields
-    if (!PAYPLUS_API_KEY || !PAYPLUS_SECRET_KEY) {
-      console.error("[Payplus] Missing API credentials");
+    const crypto = require("crypto");
+    const hash = crypto
+      .createHmac("sha256", PALPLUSS_WEBHOOK_SECRET)
+      .update(payload)
+      .digest("hex");
+
+    return hash === signature;
+  } catch (error) {
+    console.error("[PalPluss Webhook Verification Error]", error);
+    return false;
+  }
+}
+
+/**
+ * Create a PalPluss withdrawal/payout
+ */
+export async function createPalPlussWithdrawal(
+  req: PalPlussSTKPushRequest
+): Promise<PalPlussResponse> {
+  try {
+    if (!PALPLUSS_API_KEY) {
+      console.error("[PalPluss] Missing API credentials");
       return {
         success: false,
         error: "Payment gateway not configured",
       };
     }
 
-    // Create payment request to Payplus
+    const basicAuth = Buffer.from(`${PALPLUSS_API_KEY}:`).toString("base64");
+
+    console.log(`[PalPluss] Initiating withdrawal for user ${req.userId}, phone: ${req.phoneNumber}, amount: ${req.amount}`);
+
+    // Create withdrawal request to PalPluss
     const response = await axios.post(
-      `${PAYPLUS_BASE_URL}/v1/payments/checkout`,
+      `${PALPLUSS_BASE_URL}/v1/withdrawals/create`,
       {
-        amount: Math.round(req.amount * 100), // Convert to cents
-        currency: req.currency || "USD",
-        description: `TradeFlow Deposit - User ${req.userId}`,
-        customer: {
-          email: req.userEmail,
-          name: req.userName,
-        },
-        metadata: {
-          userId: req.userId,
-          type: "deposit",
-        },
-        returnUrl: req.returnUrl,
-        notifyUrl: req.notifyUrl,
+        phone: req.phoneNumber,
+        amount: req.amount,
+        accountReference: req.accountReference,
       },
       {
         headers: {
-          Authorization: `Bearer ${PAYPLUS_API_KEY}`,
+          Authorization: `Basic ${basicAuth}`,
           "Content-Type": "application/json",
         },
       }
     );
 
-    if (response.data && response.data.checkoutUrl) {
+    console.log(`[PalPluss] Withdrawal response:`, response.data);
+
+    if (response.data && response.data.withdrawalId) {
       return {
         success: true,
-        transactionId: response.data.transactionId,
-        checkoutUrl: response.data.checkoutUrl,
-      };
-    }
-
-    return {
-      success: false,
-      error: "Failed to create checkout session",
-    };
-  } catch (error: any) {
-    console.error("[Payplus Deposit Error]", error.message);
-    return {
-      success: false,
-      error: error.message || "Payment processing failed",
-    };
-  }
-}
-
-/**
- * Create a Payplus withdrawal/payout
- */
-export async function createPayplusPayout(
-  req: PayplusWithdrawalRequest
-): Promise<PayplusResponse> {
-  try {
-    if (!PAYPLUS_API_KEY || !PAYPLUS_SECRET_KEY) {
-      console.error("[Payplus] Missing API credentials");
-      return {
-        success: false,
-        error: "Payment gateway not configured",
-      };
-    }
-
-    // Create payout request to Payplus
-    const response = await axios.post(
-      `${PAYPLUS_BASE_URL}/v1/payouts/create`,
-      {
-        amount: Math.round(req.amount * 100), // Convert to cents
-        currency: req.currency || "USD",
-        recipient: {
-          email: req.userEmail,
-          accountNumber: req.accountNumber,
-          bankCode: req.bankCode,
-        },
-        metadata: {
-          userId: req.userId,
-          type: "withdrawal",
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${PAYPLUS_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (response.data && response.data.payoutId) {
-      return {
-        success: true,
-        payoutId: response.data.payoutId,
+        transactionId: response.data.withdrawalId,
         status: response.data.status || "pending",
       };
     }
 
     return {
       success: false,
-      error: "Failed to create payout",
+      error: "Failed to initiate withdrawal",
     };
   } catch (error: any) {
-    console.error("[Payplus Payout Error]", error.message);
+    console.error("[PalPluss Withdrawal Error]", error.response?.data || error.message);
     return {
       success: false,
-      error: error.message || "Payout processing failed",
+      error: error.response?.data?.error || error.message || "Withdrawal failed",
     };
   }
 }
 
 /**
- * Verify Payplus webhook signature
+ * Get payout status from PalPluss
  */
-export function verifyPayplusWebhook(payload: string, signature: string): boolean {
+export async function getPalPlussPaymentStatus(transactionId: string): Promise<any> {
   try {
-    const crypto = require("crypto");
-    const hash = crypto
-      .createHmac("sha256", PAYPLUS_WEBHOOK_SECRET)
-      .update(payload)
-      .digest("hex");
+    const basicAuth = Buffer.from(`${PALPLUSS_API_KEY}:`).toString("base64");
 
-    return hash === signature;
-  } catch (error) {
-    console.error("[Payplus Webhook Verification Error]", error);
-    return false;
-  }
-}
-
-/**
- * Get payment status from Payplus
- */
-export async function getPayplusPaymentStatus(transactionId: string): Promise<any> {
-  try {
     const response = await axios.get(
-      `${PAYPLUS_BASE_URL}/v1/payments/${transactionId}`,
+      `${PALPLUSS_BASE_URL}/v1/payments/${transactionId}`,
       {
         headers: {
-          Authorization: `Bearer ${PAYPLUS_API_KEY}`,
+          Authorization: `Basic ${basicAuth}`,
         },
       }
     );
 
     return response.data;
   } catch (error: any) {
-    console.error("[Payplus Get Payment Status Error]", error.message);
-    return null;
-  }
-}
-
-/**
- * Get payout status from Payplus
- */
-export async function getPayplusPayoutStatus(payoutId: string): Promise<any> {
-  try {
-    const response = await axios.get(
-      `${PAYPLUS_BASE_URL}/v1/payouts/${payoutId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${PAYPLUS_API_KEY}`,
-        },
-      }
-    );
-
-    return response.data;
-  } catch (error: any) {
-    console.error("[Payplus Get Payout Status Error]", error.message);
+    console.error("[PalPluss Get Payment Status Error]", error.message);
     return null;
   }
 }

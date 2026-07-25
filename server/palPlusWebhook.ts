@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { createTransaction, updateWalletBalance, getWalletsByUserId, createNotification } from "./db";
-import { verifyPayplusWebhook } from "./payplus";
+import { verifyPalPlussWebhook } from "./payplus";
 import { getDb } from "./db";
 import { transactions } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
  */
 export async function handlePalPlusWebhook(req: Request, res: Response) {
   try {
-    const signature = req.headers["x-payplus-signature"] as string;
+    const signature = req.headers["x-palpluss-signature"] as string;
     
     // Handle raw body from express.raw() middleware
     let payload: string;
@@ -23,7 +23,7 @@ export async function handlePalPlusWebhook(req: Request, res: Response) {
     }
 
     // Verify webhook signature against raw payload
-    if (!verifyPayplusWebhook(payload, signature)) {
+    if (!verifyPalPlussWebhook(payload, signature)) {
       console.warn("[PalPlus Webhook] Invalid signature");
       return res.status(401).json({ error: "Invalid signature" });
     }

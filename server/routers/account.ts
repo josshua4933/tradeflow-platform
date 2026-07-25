@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
-import { createPayplusDeposit, createPayplusSTKPush, createPayplusPayout } from "../payplus";
+import { createPalPlussSTKPush } from "../payplus";
 
 import {
   createKycDocument,
@@ -199,49 +199,48 @@ export const accountRouter = router({
       }
       if (!wallet) throw new TRPCError({ code: "BAD_REQUEST", message: "Wallet not found" });
 
-      // Create Payplus STK push for mobile deposit
+      // Create PalPluss STK push for mobile deposit
       const origin = input.origin ?? "https://tradeflow.manus.space";
-      const payplusResult = await createPayplusSTKPush({
-        amount: input.amount,
-        currency: input.currency,
+      const accountReference = `TF-DEP-${ctx.user.id}-${nanoid(8).toUpperCase()}`;
+      // Store pending transaction BEFORE calling PalPluss
+      const reference = accountReference;
+      await createTransaction({
         userId: ctx.user.id,
-        phoneNumber: input.phoneNumber,
-        userEmail: ctx.user.email ?? "",
-        userName: ctx.user.name ?? "User",
-        notifyUrl: `${origin}/api/payplus/webhook`,
+        walletId: wallet.id,
+        type: "deposit",
+        amount: input.amount.toFixed(2),
+        currency: input.currency,
+        status: "pending",
+        reference,
+        description: `PalPluss STK push deposit`,
       });
 
-      if (payplusResult.success && payplusResult.transactionId) {
-        // Store pending transaction
-        const reference = payplusResult.transactionId || `DEP-${nanoid(10).toUpperCase()}`;
-        await createTransaction({
-          userId: ctx.user.id,
-          walletId: wallet.id,
-          type: "deposit",
-          amount: input.amount.toFixed(2),
-          currency: input.currency,
-          status: "pending",
-          reference,
-          description: `Payplus deposit`,
-        });
+      // Now call PalPluss to send STK push
+      const palplussResult = await createPalPlussSTKPush({
+        amount: input.amount,
+        userId: ctx.user.id,
+        phoneNumber: input.phoneNumber,
+        accountReference,
+      });
 
+      if (palplussResult.success) {
         await logAudit({
           userId: ctx.user.id,
           action: "account.deposit.stk_push_initiated",
-          details: { amount: input.amount, currency: input.currency, reference },
+          details: { amount: input.amount, phoneNumber: input.phoneNumber, reference },
         });
 
         return {
           success: true,
           transactionId: reference,
-          status: payplusResult.status || "pending",
+          status: palplussResult.status || "pending",
           message: "STK push sent to your phone. Please complete the payment.",
         };
       }
 
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
-        message: payplusResult.error || "Failed to create payment session",
+        message: palplussResult.error || "Failed to initiate STK push",
       });
     }),
 
