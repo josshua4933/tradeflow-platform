@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,19 +9,31 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
+const SUPPORTED_CURRENCIES = [
+  { code: "USD", name: "US Dollar", rate: 1 },
+  { code: "EUR", name: "Euro", rate: 1.10 },
+  { code: "GBP", name: "British Pound", rate: 1.27 },
+  { code: "AUD", name: "Australian Dollar", rate: 0.65 },
+  { code: "CAD", name: "Canadian Dollar", rate: 0.74 },
+];
+
 export default function WalletsPanel() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [depositAmount, setDepositAmount] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
+  const [selectedCurrency, setSelectedCurrency] = useState("USD");
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { data: wallets, isLoading: walletsLoading } = trpc.account.wallets.useQuery();
   const depositMutation = trpc.account.createDepositIntent.useMutation();
   const transactionsMutation = trpc.account.transactions.useQuery({ limit: 50 });
 
-  const USD_TO_KSH_RATE = 130;
-  const amountInKSH = depositAmount ? Math.round(parseFloat(depositAmount) * USD_TO_KSH_RATE) : 0;
+  const KSH_RATE = 130;
+  const currencyData = SUPPORTED_CURRENCIES.find((c) => c.code === selectedCurrency);
+  const usdEquivalent = depositAmount ? parseFloat(depositAmount) / (currencyData?.rate || 1) : 0;
+  const amountInKSH = depositAmount ? Math.round(usdEquivalent * KSH_RATE) : 0;
 
   const handleDeposit = async () => {
     if (!depositAmount || !selectedWallet || !phoneNumber) {
@@ -32,6 +45,7 @@ export default function WalletsPanel() {
     try {
       const result = await depositMutation.mutateAsync({
         amount: parseFloat(depositAmount),
+        currency: selectedCurrency as "USD" | "EUR" | "GBP" | "JPY" | "AUD" | "CAD" | "CHF" | "CNY" | "INR" | "ZAR",
         phoneNumber,
         walletId: selectedWallet,
         origin: window.location.origin,
@@ -39,6 +53,10 @@ export default function WalletsPanel() {
 
       if (result.success) {
         toast.success(`STK push sent for ${amountInKSH} KSH! Check your phone.`);
+        // Redirect to confirmation page
+        setTimeout(() => {
+          setLocation(`/deposit-confirmation?txnId=${result.transactionId}&amount=${depositAmount}&currency=USD&phone=${phoneNumber}`);
+        }, 500);
         setDepositAmount("");
         setPhoneNumber("");
       }
@@ -99,7 +117,24 @@ export default function WalletsPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="deposit-amount">Amount (USD)</Label>
+            <Label htmlFor="currency">Currency</Label>
+            <select
+              id="currency"
+              value={selectedCurrency}
+              onChange={(e) => setSelectedCurrency(e.target.value)}
+              disabled={isProcessing}
+              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
+            >
+              {SUPPORTED_CURRENCIES.map((curr) => (
+                <option key={curr.code} value={curr.code}>
+                  {curr.code} - {curr.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <Label htmlFor="deposit-amount">Amount ({selectedCurrency})</Label>
             <Input
               id="deposit-amount"
               type="number"
@@ -110,10 +145,10 @@ export default function WalletsPanel() {
               max="100000"
               disabled={isProcessing}
             />
-            <p className="text-xs text-muted-foreground mt-1">Minimum: $10 | Maximum: $100,000</p>
+            <p className="text-xs text-muted-foreground mt-1">Minimum: 10 {selectedCurrency} | Maximum: 100,000 {selectedCurrency}</p>
             {depositAmount && (
               <p className="text-sm font-semibold mt-2 text-accent">
-                You will be charged: {amountInKSH} KSH (~${parseFloat(depositAmount).toFixed(2)} USD)
+                You will be charged: {amountInKSH} KSH (~${usdEquivalent.toFixed(2)} USD)
               </p>
             )}
           </div>

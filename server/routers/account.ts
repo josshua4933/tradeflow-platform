@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
-import { createPalPlussSTKPush } from "../payplus";
+import { createPalPlussSTKPush, convertToKSH, getExchangeRate } from "../payplus";
 
 import {
   createKycDocument,
@@ -180,7 +180,7 @@ export const accountRouter = router({
     .input(
       z.object({
         amount: z.number().min(10).max(100000),
-        currency: z.string().default("USD"),
+        currency: z.enum(["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNY", "INR", "ZAR"]).default("USD"),
         phoneNumber: z.string().min(10).max(20),
         walletId: z.number().optional(),
         origin: z.string().optional(),
@@ -221,6 +221,7 @@ export const accountRouter = router({
         userId: ctx.user.id,
         phoneNumber: input.phoneNumber,
         accountReference,
+        currency: input.currency,
       });
 
       if (palplussResult.success) {
@@ -288,5 +289,12 @@ export const accountRouter = router({
     .input(z.object({ limit: z.number().default(50) }))
     .query(async ({ ctx, input }) => {
       return getTransactionsByUserId(ctx.user.id, input.limit);
+    }),
+
+  getTransaction: protectedProcedure
+    .input(z.object({ transactionId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const transactions = await getTransactionsByUserId(ctx.user.id, 1000);
+      return transactions.find((t) => t.reference === input.transactionId) || null;
     }),
 });
