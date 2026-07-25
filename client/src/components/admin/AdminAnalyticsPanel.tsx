@@ -19,11 +19,10 @@ export default function AdminAnalyticsPanel() {
 
   const metrics = [
     { label: "Total Users", value: analytics.totalUsers, color: "bg-blue-50" },
-    { label: "Total Deposits", value: `$${analytics.depositVolume}`, color: "bg-green-50" },
-    { label: "Total Withdrawals", value: `$${analytics.withdrawalVolume}`, color: "bg-orange-50" },
-    { label: "Net Volume", value: `$${analytics.netVolume}`, color: "bg-purple-50" },
-    { label: "Completed Deposits", value: analytics.completedDeposits, color: "bg-emerald-50" },
-    { label: "Completed Withdrawals", value: analytics.completedWithdrawals, color: "bg-rose-50" },
+    { label: "Total Deposits", value: `$${analytics.totalDeposits}`, color: "bg-green-50" },
+    { label: "Total Withdrawals", value: `$${analytics.totalWithdrawals}`, color: "bg-orange-50" },
+    { label: "Total Volume", value: `$${analytics.totalVolume}`, color: "bg-purple-50" },
+    { label: "Total Transactions", value: analytics.totalTransactions, color: "bg-emerald-50" },
     { label: "Total Trades", value: analytics.totalTrades, color: "bg-indigo-50" },
   ];
 
@@ -49,34 +48,24 @@ export default function AdminAnalyticsPanel() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-sm text-muted-foreground">Deposit Success Rate</p>
-              <p className="text-lg font-semibold">
-                {analytics.totalDeposits > 0
-                  ? ((analytics.completedDeposits / analytics.totalDeposits) * 100).toFixed(1)
-                  : 0}
-                %
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Withdrawal Success Rate</p>
-              <p className="text-lg font-semibold">
-                {analytics.totalWithdrawals > 0
-                  ? ((analytics.completedWithdrawals / analytics.totalWithdrawals) * 100).toFixed(1)
-                  : 0}
-                %
-              </p>
+              <p className="text-sm text-muted-foreground">Transactions</p>
+              <p className="text-lg font-semibold">{analytics.totalTransactions}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Average Deposit</p>
               <p className="text-lg font-semibold">
-                ${analytics.totalDeposits > 0 ? (parseFloat(analytics.depositVolume) / analytics.totalDeposits).toFixed(2) : 0}
+                ${parseFloat(analytics.totalDeposits) > 0 ? (parseFloat(analytics.totalDeposits) / analytics.totalTransactions).toFixed(2) : 0}
               </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Average Withdrawal</p>
               <p className="text-lg font-semibold">
-                ${analytics.totalWithdrawals > 0 ? (parseFloat(analytics.withdrawalVolume) / analytics.totalWithdrawals).toFixed(2) : 0}
+                ${parseFloat(analytics.totalWithdrawals) > 0 ? (parseFloat(analytics.totalWithdrawals) / analytics.totalTransactions).toFixed(2) : 0}
               </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Trading Volume</p>
+              <p className="text-lg font-semibold">${analytics.totalVolume}</p>
             </div>
           </div>
         </CardContent>

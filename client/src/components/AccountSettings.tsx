@@ -65,7 +65,7 @@ function KYCSection() {
             <Label className="text-xs text-muted-foreground mb-1.5 block">Country of Issue</Label>
             <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="US" maxLength={2} />
           </div>
-          <Button onClick={() => submitKyc.mutate({ documentType: docType as any, documentUrl: docUrl, country })}
+          <Button onClick={() => submitKyc.mutate({ documentType: docType as any, documentUrl: docUrl, country, fullName: "" })}
             disabled={submitKyc.isPending || !docUrl}>
             {submitKyc.isPending ? "Submitting..." : "Submit KYC Documents"}
           </Button>
@@ -78,12 +78,12 @@ function KYCSection() {
 function TwoFASection() {
   const { data: me } = trpc.auth.me.useQuery();
   const twoFa = { enabled: me?.twoFactorEnabled ?? false };
-  const setup = trpc.account.setup2FA.useMutation();
-  const verify = trpc.account.verify2FA.useMutation({
+  const setup = trpc.account.enable2fa.useMutation();
+  const verify = trpc.account.verify2fa.useMutation({
     onSuccess: () => toast.success("2FA enabled successfully"),
     onError: (err) => toast.error(err.message),
   });
-  const disable = trpc.account.disable2FA.useMutation({
+  const disable = trpc.account.disable2fa.useMutation({
     onSuccess: () => toast.success("2FA disabled"),
     onError: (err) => toast.error(err.message),
   });
@@ -116,7 +116,7 @@ function TwoFASection() {
               <div className="text-xs text-muted-foreground">Or enter manually: <code className="font-mono bg-secondary px-1 py-0.5 rounded">{setup.data.secret}</code></div>
               <div className="flex gap-2">
                 <Input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Enter 6-digit code" maxLength={6} className="max-w-40" />
-                <Button onClick={() => verify.mutate({ token })} disabled={verify.isPending || token.length !== 6}>Verify</Button>
+                <Button onClick={() => verify.mutate({ token, secret: setup.data?.secret || "" })} disabled={verify.isPending || token.length !== 6}>Verify</Button>
               </div>
             </>
           )}

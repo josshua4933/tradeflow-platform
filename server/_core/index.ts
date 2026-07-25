@@ -4,11 +4,13 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import type { Express } from "express";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerStripeWebhook } from "../stripeWebhook";
+import { handlePalPlusWebhook } from "../palPlusWebhook";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -34,6 +36,8 @@ async function startServer() {
   const server = createServer(app);
   // Register Stripe webhook BEFORE express.json() for raw body signature verification
   registerStripeWebhook(app);
+  // Register PalPlus webhook BEFORE express.json() for signature verification
+  app.post("/api/payplus/webhook", express.raw({ type: "application/json" }), handlePalPlusWebhook);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

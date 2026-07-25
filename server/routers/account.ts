@@ -1,14 +1,8 @@
-import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import Stripe from "stripe";
+import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
-
-function getStripe(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) return null;
-  return new Stripe(key, { apiVersion: "2026-04-22.dahlia" });
-}
+import { createPayplusDeposit, createPayplusPayout } from "../payplus";
 
 import {
   createKycDocument,
@@ -48,73 +42,85 @@ export const accountRouter = router({
       await updateUser(ctx.user.id, input);
       await logAudit({
         userId: ctx.user.id,
-        action: "account.update_profile",
-        entity: "user",
-        entityId: String(ctx.user.id),
-        details: { fields: Object.keys(input) },
+        action: "profile.update",
+        details: input,
       });
       return { success: true };
     }),
 
-  acceptTerms: protectedProcedure
-    .input(z.object({ terms: z.boolean(), riskDisclosure: z.boolean() }))
+  // ─── 2FA Setup ─────────────────────────────────────────────────────────────
+  enable2fa: protectedProcedure.mutation(async ({ ctx }) => {
+    const secret = speakeasy.generateSecret({
+      name: `TradeFlow (${ctx.user.email})`,
+      issuer: "TradeFlow",
+      length: 32,
+    });
+
+    const otpauth = secret.otpauth_url;
+
+    await logAudit({
+      userId: ctx.user.id,
+      action: "2fa.setup_initiated",
+      details: {},
+    });
+
+    return {
+      secret: secret.base32,
+      otpauth,
+      manualEntry: secret.base32,
+    };
+  }),
+
+  verify2fa: protectedProcedure
+    .input(z.object({ token: z.string(), secret: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const updates: Record<string, unknown> = {};
-      if (input.terms) updates.termsAcceptedAt = new Date();
-      if (input.riskDisclosure) updates.riskDisclosureAcceptedAt = new Date();
-      await updateUser(ctx.user.id, updates);
-      await logAudit({ userId: ctx.user.id, action: "account.accept_terms", details: input });
+      const verified = speakeasy.totp.verify({
+        secret: input.secret,
+        encoding: "base32",
+        token: input.token,
+        window: 2,
+      });
+
+      if (!verified) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid 2FA token" });
+      }
+
+      await updateUser(ctx.user.id, { twoFactorSecret: input.secret, twoFactorEnabled: true });
+      await logAudit({
+        userId: ctx.user.id,
+        action: "2fa.enabled",
+        details: {},
+      });
+
       return { success: true };
     }),
 
-  // ─── 2FA ───────────────────────────────────────────────────────────────────
-  setup2FA: protectedProcedure.mutation(async ({ ctx }) => {
-    const secretObj = speakeasy.generateSecret({ length: 20, name: `TradeFlow:${ctx.user.email ?? ctx.user.name ?? "user"}` });
-    const secret = secretObj.base32 as string;
-    const otpauth = secretObj.otpauth_url as string;
-    await updateUser(ctx.user.id, { twoFactorSecret: secret });
-    return { secret, otpauth };
-  }),
-
-  verify2FA: protectedProcedure
-    .input(z.object({ token: z.string().length(6) }))
+  disable2fa: protectedProcedure
+    .input(z.object({ token: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user;
       if (!user.twoFactorSecret) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "2FA not set up" });
-      }
-      const isValid = speakeasy.totp.verify({
-        token: input.token,
-        secret: user.twoFactorSecret,
-        encoding: "base32",
-        window: 1,
-      }) as boolean;
-      if (!isValid) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid 2FA token" });
-      }
-      await updateUser(ctx.user.id, { twoFactorEnabled: true });
-      await logAudit({ userId: ctx.user.id, action: "account.enable_2fa" });
-      return { success: true };
-    }),
-
-  disable2FA: protectedProcedure
-    .input(z.object({ token: z.string().length(6) }))
-    .mutation(async ({ ctx, input }) => {
-      const user = ctx.user;
-      if (!user.twoFactorSecret || !user.twoFactorEnabled) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "2FA not enabled" });
       }
-      const isValid = speakeasy.totp.verify({
-        token: input.token,
+
+      const verified = speakeasy.totp.verify({
         secret: user.twoFactorSecret,
         encoding: "base32",
-        window: 1,
-      }) as boolean;
-      if (!isValid) {
+        token: input.token,
+        window: 2,
+      });
+
+      if (!verified) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid 2FA token" });
       }
-      await updateUser(ctx.user.id, { twoFactorEnabled: false, twoFactorSecret: null });
-      await logAudit({ userId: ctx.user.id, action: "account.disable_2fa" });
+
+      await updateUser(ctx.user.id, { twoFactorSecret: null, twoFactorEnabled: false });
+      await logAudit({
+        userId: ctx.user.id,
+        action: "2fa.disabled",
+        details: {},
+      });
+
       return { success: true };
     }),
 
@@ -122,37 +128,22 @@ export const accountRouter = router({
   submitKyc: protectedProcedure
     .input(
       z.object({
-        documentType: z.enum(["passport", "national_id", "drivers_license", "utility_bill", "bank_statement"]),
+        documentType: z.enum(["passport", "drivers_license", "national_id", "utility_bill", "bank_statement"]),
         documentUrl: z.string().url(),
-        phone: z.string().optional(),
-        country: z.string().optional(),
-        dateOfBirth: z.string().optional(),
-        address: z.string().optional(),
+        country: z.string(),
+        fullName: z.string(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       await createKycDocument({
         userId: ctx.user.id,
-        documentType: input.documentType,
+        documentType: input.documentType as "passport" | "drivers_license" | "national_id" | "utility_bill" | "bank_statement",
         documentUrl: input.documentUrl,
       });
-      await updateUser(ctx.user.id, {
-        kycStatus: "submitted",
-        kycSubmittedAt: new Date(),
-        ...(input.phone && { phone: input.phone }),
-        ...(input.country && { country: input.country }),
-        ...(input.dateOfBirth && { dateOfBirth: input.dateOfBirth }),
-        ...(input.address && { address: input.address }),
-      });
-      await createNotification({
-        userId: ctx.user.id,
-        type: "kyc_update",
-        title: "KYC Documents Submitted",
-        message: "Your identity verification documents have been submitted and are under review. This typically takes 1-2 business days.",
-      });
+
       await logAudit({
         userId: ctx.user.id,
-        action: "kyc.submit",
+        action: "kyc.submitted",
         details: { documentType: input.documentType },
       });
       return { success: true };
@@ -184,7 +175,7 @@ export const accountRouter = router({
       return { success: true };
     }),
 
-  // ─── Deposits ──────────────────────────────────────────────────────────────
+  // ─── Deposits (Payplus) ────────────────────────────────────────────────────
   createDepositIntent: protectedProcedure
     .input(
       z.object({
@@ -207,100 +198,68 @@ export const accountRouter = router({
       }
       if (!wallet) throw new TRPCError({ code: "BAD_REQUEST", message: "Wallet not found" });
 
-      // Use Stripe Checkout when configured
-      const stripe = getStripe();
-      if (stripe) {
-        const origin = input.origin ?? "https://tradeflow.manus.space";
-        const session = await stripe.checkout.sessions.create({
-          mode: "payment",
-          payment_method_types: ["card"],
-          customer_email: ctx.user.email ?? undefined,
-          line_items: [
-            {
-              price_data: {
-                currency: input.currency.toLowerCase(),
-                product_data: {
-                  name: "TradeFlow Wallet Deposit",
-                  description: `Deposit to your ${input.currency} trading wallet`,
-                },
-                unit_amount: Math.round(input.amount * 100),
-              },
-              quantity: 1,
-            },
-          ],
-          metadata: {
-            user_id: ctx.user.id.toString(),
-            wallet_id: wallet.id.toString(),
-            customer_email: ctx.user.email ?? "",
-            customer_name: ctx.user.name ?? "",
-          },
-          client_reference_id: ctx.user.id.toString(),
-          allow_promotion_codes: true,
-          success_url: `${origin}/wallets?deposit=success&session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${origin}/wallets?deposit=cancelled`,
+      // Create Payplus deposit session
+      const origin = input.origin ?? "https://tradeflow.manus.space";
+      const payplusResult = await createPayplusDeposit({
+        amount: input.amount,
+        currency: input.currency,
+        userId: ctx.user.id,
+        userEmail: ctx.user.email ?? "",
+        userName: ctx.user.name ?? "User",
+        returnUrl: `${origin}/wallets?deposit=success`,
+        notifyUrl: `${origin}/api/payplus/webhook`,
+      });
+
+      if (payplusResult.success && payplusResult.checkoutUrl) {
+        // Store pending transaction
+        const reference = payplusResult.transactionId || `DEP-${nanoid(10).toUpperCase()}`;
+        await createTransaction({
+          userId: ctx.user.id,
+          walletId: wallet.id,
+          type: "deposit",
+          amount: input.amount.toFixed(2),
+          currency: input.currency,
+          status: "pending",
+          reference,
+          description: `Payplus deposit`,
         });
+
         await logAudit({
           userId: ctx.user.id,
-          action: "account.deposit.stripe_initiated",
-          details: { amount: input.amount, currency: input.currency, sessionId: session.id },
+          action: "account.deposit.payplus_initiated",
+          details: { amount: input.amount, currency: input.currency, reference },
         });
-        return { success: true, checkoutUrl: session.url, reference: session.id, newBalance: wallet.balance };
+
+        return {
+          success: true,
+          checkoutUrl: payplusResult.checkoutUrl,
+          reference,
+          newBalance: wallet.balance,
+        };
       }
 
-      // Fallback: demo deposit (no Stripe key configured)
-      const reference = `DEP-${nanoid(10).toUpperCase()}`;
-      await createTransaction({
-        userId: ctx.user.id,
-        walletId: wallet.id,
-        type: "deposit",
-        amount: input.amount.toFixed(2),
-        currency: input.currency,
-        status: "completed",
-        reference,
-        description: `Demo deposit`,
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: payplusResult.error || "Failed to create payment session",
       });
-
-      const newBalance = parseFloat(wallet.balance) + input.amount;
-      await updateWalletBalance(wallet.id, newBalance.toFixed(2), newBalance.toFixed(2), wallet.margin);
-
-      await createNotification({
-        userId: ctx.user.id,
-        type: "withdrawal_update",
-        title: "Deposit Successful",
-        message: `$${input.amount.toFixed(2)} has been credited to your ${input.currency} wallet. Reference: ${reference}`,
-        metadata: { reference, amount: input.amount },
-      });
-
-      await logAudit({
-        userId: ctx.user.id,
-        action: "account.deposit",
-        details: { amount: input.amount, currency: input.currency, reference },
-      });
-
-      return { success: true, reference, newBalance: newBalance.toFixed(2) };
     }),
 
-  // ─── Withdrawals ───────────────────────────────────────────────────────────
+  // ─── Withdrawals (Payplus) ────────────────────────────────────────────────
   requestWithdrawal: protectedProcedure
     .input(
       z.object({
-        amount: z.number().min(10),
-        currency: z.string().default("USD"),
-        method: z.enum(["bank_transfer", "card", "crypto", "ewallet"]),
-        destination: z.string().min(5),
-        walletId: z.number().optional(),
+        amount: z.number().min(10).max(100000),
+        walletId: z.number(),
+        accountNumber: z.string().optional(),
+        bankCode: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const walletList = await getWalletsByUserId(ctx.user.id);
-      const wallet = input.walletId
-        ? walletList.find((w) => w.id === input.walletId)
-        : walletList.find((w) => w.isDefault) ?? walletList[0];
-
-      if (!wallet) throw new TRPCError({ code: "BAD_REQUEST", message: "Wallet not found" });
+      const wallet = (await getWalletsByUserId(ctx.user.id)).find((w) => w.id === input.walletId);
+      if (!wallet) throw new TRPCError({ code: "NOT_FOUND", message: "Wallet not found" });
 
       const balance = parseFloat(wallet.balance);
-      if (input.amount > balance) {
+      if (balance < input.amount) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Insufficient balance" });
       }
 
@@ -310,67 +269,24 @@ export const accountRouter = router({
         walletId: wallet.id,
         type: "withdrawal",
         amount: input.amount.toFixed(2),
-        currency: input.currency,
-        status: "processing",
+        currency: wallet.currency,
+        status: "pending",
         reference,
-        description: `Withdrawal via ${input.method} to ${input.destination}`,
-        metadata: { method: input.method, destination: input.destination },
-      });
-
-      const newBalance = balance - input.amount;
-      await updateWalletBalance(wallet.id, newBalance.toFixed(2), newBalance.toFixed(2), wallet.margin);
-
-      await createNotification({
-        userId: ctx.user.id,
-        type: "withdrawal_update",
-        title: "Withdrawal Request Submitted",
-        message: `Your withdrawal of $${input.amount.toFixed(2)} via ${input.method} is being processed. Reference: ${reference}`,
-        metadata: { reference, amount: input.amount, method: input.method },
+        description: `Withdrawal request`,
       });
 
       await logAudit({
         userId: ctx.user.id,
-        action: "account.withdrawal",
-        details: { amount: input.amount, method: input.method, reference },
+        action: "withdrawal.requested",
+        details: { amount: input.amount, reference },
       });
 
       return { success: true, reference };
     }),
 
-  // ─── Transactions ──────────────────────────────────────────────────────────
   transactions: protectedProcedure
-    .input(z.object({ limit: z.number().min(1).max(500).default(50) }).optional())
+    .input(z.object({ limit: z.number().default(50) }))
     .query(async ({ ctx, input }) => {
-      return getTransactionsByUserId(ctx.user.id, input?.limit ?? 50);
+      return getTransactionsByUserId(ctx.user.id, input.limit);
     }),
-
-  // ─── Leverage ──────────────────────────────────────────────────────────────
-  updateLeverage: protectedProcedure
-    .input(z.object({ walletId: z.number(), leverage: z.number().min(1).max(1000) }))
-    .mutation(async ({ ctx, input }) => {
-      const wallets = await getWalletsByUserId(ctx.user.id);
-      const wallet = wallets.find((w) => w.id === input.walletId);
-      if (!wallet) throw new TRPCError({ code: "NOT_FOUND", message: "Wallet not found" });
-      const db = await (await import("../db")).getDb();
-      if (db) {
-        const { wallets: walletsTable } = await import("../../drizzle/schema");
-        const { eq } = await import("drizzle-orm");
-        await db.update(walletsTable).set({ leverage: input.leverage }).where(eq(walletsTable.id, input.walletId));
-      }
-      await logAudit({ userId: ctx.user.id, action: "account.update_leverage", details: { walletId: input.walletId, leverage: input.leverage } });
-      return { success: true };
-    }),
-
-  // ─── Referral ──────────────────────────────────────────────────────────────
-  generateReferralCode: protectedProcedure.mutation(async ({ ctx }) => {
-    if (ctx.user.referralCode) return { code: ctx.user.referralCode };
-    const code = nanoid(8).toUpperCase();
-    await updateUser(ctx.user.id, { referralCode: code });
-    return { code };
-  }),
-
-  referralStats: protectedProcedure.query(async ({ ctx }) => {
-    const { getReferralStats } = await import("../db");
-    return getReferralStats(ctx.user.id);
-  }),
 });

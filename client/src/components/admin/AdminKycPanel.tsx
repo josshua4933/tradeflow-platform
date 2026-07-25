@@ -10,9 +10,9 @@ export default function AdminKycPanel() {
   const approveMutation = trpc.admin.approveKyc.useMutation();
   const rejectMutation = trpc.admin.rejectKyc.useMutation();
 
-  const handleApprove = async (kycId: number) => {
+  const handleApprove = async (documentId: number) => {
     try {
-      await approveMutation.mutateAsync({ kycId });
+      await approveMutation.mutateAsync({ documentId });
       toast.success("KYC approved");
       refetch();
     } catch (error) {
@@ -20,9 +20,9 @@ export default function AdminKycPanel() {
     }
   };
 
-  const handleReject = async (kycId: number) => {
+  const handleReject = async (documentId: number) => {
     try {
-      await rejectMutation.mutateAsync({ kycId, reason: "Rejected by admin" });
+      await rejectMutation.mutateAsync({ documentId, reason: "Rejected by admin" });
       toast.success("KYC rejected");
       refetch();
     } catch (error) {

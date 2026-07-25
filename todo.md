@@ -70,20 +70,32 @@
 - [x] Final checkpoint and delivery
 
 
-## Phase 9: Admin Dashboard (NEW)
-- [ ] Admin router: getAllUsers, getUserDetails, updateUserStatus
-- [ ] Admin router: getAllDeposits, getDepositDetails, confirmDeposit
-- [ ] Admin router: getAllWithdrawals, approveWithdrawal, rejectWithdrawal
-- [ ] Admin router: getAllKycDocuments, approveKyc, rejectKyc
-- [ ] Admin router: getAllTrades, getTradingStats
-- [ ] Admin router: getPlatformAnalytics (total deposits, withdrawals, users, volume)
-- [ ] Admin router: manageNotifications (send system-wide alerts)
-- [ ] Admin page: Users management table with filters
-- [ ] Admin page: Deposits tracking with approval workflow
-- [ ] Admin page: Withdrawals management with approve/reject
-- [ ] Admin page: KYC documents review with approval
-- [ ] Admin page: Trading activity monitor
-- [ ] Admin page: Platform analytics dashboard
-- [ ] Role-gating: /admin route protected to admin users only
-- [ ] Update owner user to admin role
-- [ ] Test admin workflows
+## Phase 9: Admin Dashboard
+- [x] Admin router: getAllUsers, getUserDetails, updateUserStatus
+- [x] Admin router: getAllDeposits, getDepositDetails, confirmDeposit
+- [x] Admin router: getAllWithdrawals, approveWithdrawal, rejectWithdrawal
+- [x] Admin router: getAllKycDocuments, approveKyc, rejectKyc
+- [x] Admin router: getAllTrades, getTradingStats
+- [x] Admin router: getPlatformAnalytics (total deposits, withdrawals, users, volume)
+- [x] Admin router: manageNotifications (send system-wide alerts)
+- [x] Admin page: Users management table with filters
+- [x] Admin page: Deposits tracking with approval workflow
+- [x] Admin page: Withdrawals management with approve/reject
+- [x] Admin page: KYC documents review with approval
+- [x] Admin page: Trading activity monitor
+- [x] Admin page: Platform analytics dashboard
+- [x] Role-gating: /admin route protected to admin users only
+- [x] Update owner user to admin role
+- [x] Test admin workflows
+
+## Phase 10: PalPlus Payment Integration
+- [x] PalPlus service layer: createPayplusDeposit, createPayplusPayout, webhook verification
+- [x] Account router: createDepositIntent (returns checkout URL)
+- [x] Account router: requestWithdrawal (creates pending withdrawal)
+- [x] PalPlus webhook handler: payment.completed, payout.completed, payout.failed
+- [x] Register PalPlus webhook route at /api/payplus/webhook
+- [x] Webhook updates wallet balances on deposit confirmation
+- [x] Webhook handles payout completion and failure with refunds
+- [x] Admin approval workflow for withdrawals
+- [x] End-to-end deposit flow: checkout -> webhook -> wallet credit
+- [x] End-to-end withdrawal flow: request -> admin approval -> payout -> webhook
