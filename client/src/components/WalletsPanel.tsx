@@ -19,6 +19,9 @@ export default function WalletsPanel() {
   const depositMutation = trpc.account.createDepositIntent.useMutation();
   const transactionsMutation = trpc.account.transactions.useQuery({ limit: 50 });
 
+  const USD_TO_KSH_RATE = 130;
+  const amountInKSH = depositAmount ? Math.round(parseFloat(depositAmount) * USD_TO_KSH_RATE) : 0;
+
   const handleDeposit = async () => {
     if (!depositAmount || !selectedWallet || !phoneNumber) {
       toast.error("Please enter amount, phone number, and select wallet");
@@ -35,12 +38,13 @@ export default function WalletsPanel() {
       });
 
       if (result.success) {
-        toast.success(result.message || "STK push sent! Check your phone.");
+        toast.success(`STK push sent for ${amountInKSH} KSH! Check your phone.`);
         setDepositAmount("");
         setPhoneNumber("");
       }
     } catch (error: any) {
-      toast.error(error.message || "Deposit failed");
+      // Error is already handled by tRPC, just show generic message
+      toast.error("Failed to send STK push. Please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -107,6 +111,11 @@ export default function WalletsPanel() {
               disabled={isProcessing}
             />
             <p className="text-xs text-muted-foreground mt-1">Minimum: $10 | Maximum: $100,000</p>
+            {depositAmount && (
+              <p className="text-sm font-semibold mt-2 text-accent">
+                You will be charged: {amountInKSH} KSH (~${parseFloat(depositAmount).toFixed(2)} USD)
+              </p>
+            )}
           </div>
 
           <div>

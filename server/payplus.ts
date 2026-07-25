@@ -5,6 +5,23 @@ const PALPLUSS_API_KEY = process.env.PALPLUSS_API_KEY || "";
 const PALPLUSS_WEBHOOK_SECRET = process.env.PALPLUSS_WEBHOOK_SECRET || "";
 const PALPLUSS_BASE_URL = "https://api.palpluss.com";
 
+// Currency conversion
+const USD_TO_KSH_RATE = 130; // 1 USD = 130 KSH
+
+/**
+ * Convert USD amount to KSH
+ */
+export function convertUSDToKSH(usdAmount: number): number {
+  return Math.round(usdAmount * USD_TO_KSH_RATE);
+}
+
+/**
+ * Convert KSH amount to USD
+ */
+export function convertKSHToUSD(kshAmount: number): number {
+  return Math.round((kshAmount / USD_TO_KSH_RATE) * 100) / 100;
+}
+
 interface PalPlussSTKPushRequest {
   amount: number;
   userId: number;
@@ -38,14 +55,17 @@ export async function createPalPlussSTKPush(
     // Encode API key for Basic Authentication
     const basicAuth = Buffer.from(`${PALPLUSS_API_KEY}:`).toString("base64");
 
-    console.log(`[PalPluss] Initiating STK push for user ${req.userId}, phone: ${req.phoneNumber}, amount: ${req.amount}`);
+    // Convert USD to KSH for PalPluss
+    const amountInKSH = convertUSDToKSH(req.amount);
+
+    console.log(`[PalPluss] Initiating STK push for user ${req.userId}, phone: ${req.phoneNumber}, amount: ${req.amount} USD = ${amountInKSH} KSH`);
 
     // Create STK push request to PalPluss
     const response = await axios.post(
       `${PALPLUSS_BASE_URL}/v1/payments/stk`,
       {
         phone: req.phoneNumber,
-        amount: req.amount,
+        amount: amountInKSH,
         accountReference: req.accountReference,
       },
       {
