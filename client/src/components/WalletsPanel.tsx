@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 export default function WalletsPanel() {
   const { user } = useAuth();
   const [depositAmount, setDepositAmount] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -19,8 +20,8 @@ export default function WalletsPanel() {
   const transactionsMutation = trpc.account.transactions.useQuery({ limit: 50 });
 
   const handleDeposit = async () => {
-    if (!depositAmount || !selectedWallet) {
-      toast.error("Please enter amount and select wallet");
+    if (!depositAmount || !selectedWallet || !phoneNumber) {
+      toast.error("Please enter amount, phone number, and select wallet");
       return;
     }
 
@@ -28,15 +29,15 @@ export default function WalletsPanel() {
     try {
       const result = await depositMutation.mutateAsync({
         amount: parseFloat(depositAmount),
+        phoneNumber,
         walletId: selectedWallet,
         origin: window.location.origin,
       });
 
-      if (result.success && result.checkoutUrl) {
-        // Open Payplus checkout in new tab
-        window.open(result.checkoutUrl, "_blank");
-        toast.success("Redirecting to Payplus checkout...");
+      if (result.success) {
+        toast.success(result.message || "STK push sent! Check your phone.");
         setDepositAmount("");
+        setPhoneNumber("");
       }
     } catch (error: any) {
       toast.error(error.message || "Deposit failed");
@@ -108,18 +109,31 @@ export default function WalletsPanel() {
             <p className="text-xs text-muted-foreground mt-1">Minimum: $10 | Maximum: $100,000</p>
           </div>
 
+          <div>
+            <Label htmlFor="phone-number">Phone Number</Label>
+            <Input
+              id="phone-number"
+              type="tel"
+              placeholder="Enter your phone number"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              disabled={isProcessing}
+            />
+            <p className="text-xs text-muted-foreground mt-1">STK push will be sent to this number</p>
+          </div>
+
           <Button
             onClick={handleDeposit}
-            disabled={!selectedWallet || !depositAmount || isProcessing}
+            disabled={!selectedWallet || !depositAmount || !phoneNumber || isProcessing}
             className="w-full"
           >
             {isProcessing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
+                Sending STK Push...
               </>
             ) : (
-              "Deposit with Payplus"
+              "Send STK Push"
             )}
           </Button>
         </CardContent>

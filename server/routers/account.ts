@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
-import { createPayplusDeposit, createPayplusPayout } from "../payplus";
+import { createPayplusDeposit, createPayplusSTKPush, createPayplusPayout } from "../payplus";
 
 import {
   createKycDocument,
@@ -181,6 +181,7 @@ export const accountRouter = router({
       z.object({
         amount: z.number().min(10).max(100000),
         currency: z.string().default("USD"),
+        phoneNumber: z.string().min(10).max(20),
         walletId: z.number().optional(),
         origin: z.string().optional(),
       })
@@ -198,19 +199,19 @@ export const accountRouter = router({
       }
       if (!wallet) throw new TRPCError({ code: "BAD_REQUEST", message: "Wallet not found" });
 
-      // Create Payplus deposit session
+      // Create Payplus STK push for mobile deposit
       const origin = input.origin ?? "https://tradeflow.manus.space";
-      const payplusResult = await createPayplusDeposit({
+      const payplusResult = await createPayplusSTKPush({
         amount: input.amount,
         currency: input.currency,
         userId: ctx.user.id,
+        phoneNumber: input.phoneNumber,
         userEmail: ctx.user.email ?? "",
         userName: ctx.user.name ?? "User",
-        returnUrl: `${origin}/wallets?deposit=success`,
         notifyUrl: `${origin}/api/payplus/webhook`,
       });
 
-      if (payplusResult.success && payplusResult.checkoutUrl) {
+      if (payplusResult.success && payplusResult.transactionId) {
         // Store pending transaction
         const reference = payplusResult.transactionId || `DEP-${nanoid(10).toUpperCase()}`;
         await createTransaction({
@@ -226,15 +227,15 @@ export const accountRouter = router({
 
         await logAudit({
           userId: ctx.user.id,
-          action: "account.deposit.payplus_initiated",
+          action: "account.deposit.stk_push_initiated",
           details: { amount: input.amount, currency: input.currency, reference },
         });
 
         return {
           success: true,
-          checkoutUrl: payplusResult.checkoutUrl,
-          reference,
-          newBalance: wallet.balance,
+          transactionId: reference,
+          status: payplusResult.status || "pending",
+          message: "STK push sent to your phone. Please complete the payment.",
         };
       }
 

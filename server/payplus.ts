@@ -16,6 +16,16 @@ interface PayplusDepositRequest {
   notifyUrl: string;
 }
 
+interface PayplusSTKPushRequest {
+  amount: number;
+  currency: string;
+  userId: number;
+  phoneNumber: string;
+  userEmail: string;
+  userName: string;
+  notifyUrl: string;
+}
+
 interface PayplusWithdrawalRequest {
   amount: number;
   currency: string;
@@ -35,7 +45,70 @@ interface PayplusResponse {
 }
 
 /**
- * Create a Payplus deposit/payment session
+ * Create a Payplus STK push for mobile deposits
+ */
+export async function createPayplusSTKPush(
+  req: PayplusSTKPushRequest
+): Promise<PayplusResponse> {
+  try {
+    if (!PAYPLUS_API_KEY || !PAYPLUS_SECRET_KEY) {
+      console.error("[Payplus] Missing API credentials");
+      return {
+        success: false,
+        error: "Payment gateway not configured",
+      };
+    }
+
+    // Create STK push request to Payplus
+    const response = await axios.post(
+      `${PAYPLUS_BASE_URL}/v1/payments/stk-push`,
+      {
+        amount: Math.round(req.amount * 100), // Convert to cents
+        currency: req.currency || "USD",
+        phoneNumber: req.phoneNumber,
+        description: `TradeFlow Deposit - User ${req.userId}`,
+        customer: {
+          email: req.userEmail,
+          name: req.userName,
+          phoneNumber: req.phoneNumber,
+        },
+        metadata: {
+          userId: req.userId,
+          type: "deposit",
+        },
+        notifyUrl: req.notifyUrl,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${PAYPLUS_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.data && response.data.transactionId) {
+      return {
+        success: true,
+        transactionId: response.data.transactionId,
+        status: response.data.status || "pending",
+      };
+    }
+
+    return {
+      success: false,
+      error: "Failed to initiate STK push",
+    };
+  } catch (error: any) {
+    console.error("[Payplus STK Push Error]", error.message);
+    return {
+      success: false,
+      error: error.message || "STK push failed",
+    };
+  }
+}
+
+/**
+ * Create a Payplus deposit/payment session (legacy checkout method)
  */
 export async function createPayplusDeposit(
   req: PayplusDepositRequest
@@ -160,24 +233,15 @@ export async function createPayplusPayout(
 /**
  * Verify Payplus webhook signature
  */
-export function verifyPayplusWebhook(
-  payload: string,
-  signature: string
-): boolean {
+export function verifyPayplusWebhook(payload: string, signature: string): boolean {
   try {
-    if (!PAYPLUS_WEBHOOK_SECRET) {
-      console.warn("[Payplus] Webhook secret not configured");
-      return false;
-    }
-
-    // Simple HMAC verification (adjust based on Payplus actual implementation)
     const crypto = require("crypto");
-    const expectedSignature = crypto
+    const hash = crypto
       .createHmac("sha256", PAYPLUS_WEBHOOK_SECRET)
       .update(payload)
       .digest("hex");
 
-    return signature === expectedSignature;
+    return hash === signature;
   } catch (error) {
     console.error("[Payplus Webhook Verification Error]", error);
     return false;
@@ -187,9 +251,7 @@ export function verifyPayplusWebhook(
 /**
  * Get payment status from Payplus
  */
-export async function getPayplusPaymentStatus(
-  transactionId: string
-): Promise<PayplusResponse> {
+export async function getPayplusPaymentStatus(transactionId: string): Promise<any> {
   try {
     const response = await axios.get(
       `${PAYPLUS_BASE_URL}/v1/payments/${transactionId}`,
@@ -200,26 +262,17 @@ export async function getPayplusPaymentStatus(
       }
     );
 
-    return {
-      success: true,
-      status: response.data.status,
-      transactionId: response.data.transactionId,
-    };
+    return response.data;
   } catch (error: any) {
-    console.error("[Payplus Status Check Error]", error.message);
-    return {
-      success: false,
-      error: error.message,
-    };
+    console.error("[Payplus Get Payment Status Error]", error.message);
+    return null;
   }
 }
 
 /**
  * Get payout status from Payplus
  */
-export async function getPayplusPayoutStatus(
-  payoutId: string
-): Promise<PayplusResponse> {
+export async function getPayplusPayoutStatus(payoutId: string): Promise<any> {
   try {
     const response = await axios.get(
       `${PAYPLUS_BASE_URL}/v1/payouts/${payoutId}`,
@@ -230,16 +283,9 @@ export async function getPayplusPayoutStatus(
       }
     );
 
-    return {
-      success: true,
-      status: response.data.status,
-      payoutId: response.data.payoutId,
-    };
+    return response.data;
   } catch (error: any) {
-    console.error("[Payplus Payout Status Error]", error.message);
-    return {
-      success: false,
-      error: error.message,
-    };
+    console.error("[Payplus Get Payout Status Error]", error.message);
+    return null;
   }
 }
