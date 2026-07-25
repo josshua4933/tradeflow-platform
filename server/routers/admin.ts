@@ -410,14 +410,12 @@ export const adminRouter = router({
     };
   }),
 
-  manageNotifications: adminProcedure
+    manageNotifications: adminProcedure
     .input(z.object({ title: z.string(), message: z.string() }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-
       const allUsers = await db.select().from(users);
-
       for (const user of allUsers) {
         await createNotification({
           userId: user.id,
@@ -427,7 +425,6 @@ export const adminRouter = router({
           metadata: { sentBy: ctx.user.id },
         });
       }
-
       await db.insert(auditLog).values({
         userId: ctx.user.id,
         action: "admin.send_notification",
@@ -436,7 +433,112 @@ export const adminRouter = router({
         details: JSON.stringify({ title: input.title, userCount: allUsers.length }),
         createdAt: new Date(),
       });
-
       return { success: true, notificationsSent: allUsers.length };
+    }),
+
+  // ─── Audit Log Viewer ──────────────────────────────────────────────────
+  getAuditLog: adminProcedure
+    .input(z.object({
+      limit: z.number().default(100),
+      offset: z.number().default(0),
+      action: z.string().optional(),
+      userId: z.number().optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const conditions = [];
+
+      if (input?.action) {
+        conditions.push(eq(auditLog.action, input.action));
+      }
+      if (input?.userId) {
+        conditions.push(eq(auditLog.userId, input.userId));
+      }
+
+      let query = db.select().from(auditLog);
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+
+      const logs = await (query as any)
+        .orderBy(desc(auditLog.createdAt))
+        .limit(input?.limit ?? 100)
+        .offset(input?.offset ?? 0);
+
+      return logs;
+    }),
+
+  // ─── Bulk User Management ──────────────────────────────────────────────
+  exportUsers: adminProcedure
+    .input(z.object({ format: z.enum(["json", "csv"]).default("json") }).optional())
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const allUsers = await db.select().from(users);
+      return {
+        format: input?.format ?? "json",
+        count: allUsers.length,
+        data: allUsers,
+      };
+    }),
+
+  bulkSuspendUsers: adminProcedure
+    .input(z.object({ userIds: z.array(z.number()), reason: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      for (const userId of input.userIds) {
+        await db.update(users).set({ accountType: "standard" }).where(eq(users.id, userId));
+        await createNotification({
+          userId,
+          type: "system",
+          title: "Account Suspended",
+          message: input.reason,
+          metadata: { suspendedBy: ctx.user.id },
+        });
+      }
+
+      await db.insert(auditLog).values({
+        userId: ctx.user.id,
+        action: "admin.bulk_suspend_users",
+        entity: "users",
+        entityId: input.userIds.join(","),
+        details: JSON.stringify({ count: input.userIds.length, reason: input.reason }),
+        createdAt: new Date(),
+      });
+
+      return { success: true, suspended: input.userIds.length };
+    }),
+
+  bulkSendNotification: adminProcedure
+    .input(z.object({ userIds: z.array(z.number()), title: z.string(), message: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      for (const userId of input.userIds) {
+        await createNotification({
+          userId,
+          type: "system",
+          title: input.title,
+          message: input.message,
+          metadata: { sentBy: ctx.user.id },
+        });
+      }
+
+      await db.insert(auditLog).values({
+        userId: ctx.user.id,
+        action: "admin.bulk_notification",
+        entity: "users",
+        entityId: input.userIds.join(","),
+        details: JSON.stringify({ count: input.userIds.length, title: input.title }),
+        createdAt: new Date(),
+      });
+
+      return { success: true, notificationsSent: input.userIds.length };
     }),
 });

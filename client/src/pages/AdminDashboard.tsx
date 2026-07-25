@@ -7,6 +7,9 @@ import AdminDepositsPanel from "@/components/admin/AdminDepositsPanel";
 import AdminWithdrawalsPanel from "@/components/admin/AdminWithdrawalsPanel";
 import AdminKycPanel from "@/components/admin/AdminKycPanel";
 import AdminAnalyticsPanel from "@/components/admin/AdminAnalyticsPanel";
+import AdminAuditLogPanel from "@/components/admin/AdminAuditLogPanel";
+import AdminBulkActionsPanel from "@/components/admin/AdminBulkActionsPanel";
+import AdminConfigPanel from "@/components/admin/AdminConfigPanel";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -33,12 +36,15 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="analytics" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-8">
+          <TabsList className="grid w-full grid-cols-8 mb-8 overflow-x-auto">
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="deposits">Deposits</TabsTrigger>
             <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
             <TabsTrigger value="kyc">KYC Review</TabsTrigger>
+            <TabsTrigger value="audit">Audit Log</TabsTrigger>
+            <TabsTrigger value="bulk">Bulk Actions</TabsTrigger>
+            <TabsTrigger value="config">Configuration</TabsTrigger>
           </TabsList>
 
           <TabsContent value="analytics">
@@ -59,6 +65,18 @@ export default function AdminDashboard() {
 
           <TabsContent value="kyc">
             <AdminKycPanel />
+          </TabsContent>
+
+          <TabsContent value="audit">
+            <AdminAuditLogPanel />
+          </TabsContent>
+
+          <TabsContent value="bulk">
+            <AdminBulkActionsPanel />
+          </TabsContent>
+
+          <TabsContent value="config">
+            <AdminConfigPanel />
           </TabsContent>
         </Tabs>
       </div>
