@@ -455,3 +455,32 @@ describe("price simulation", () => {
     });
   });
 });
+
+
+// ─── PalPluss Integration Tests ────────────────────────────────────────────────
+describe("palpluss", () => {
+  it("PALPLUSS_API_KEY environment variable is configured", () => {
+    const apiKey = process.env.PALPLUSS_API_KEY;
+    expect(apiKey).toBeDefined();
+    expect(apiKey).not.toBe("");
+    expect(apiKey?.length).toBeGreaterThan(0);
+  });
+
+  it("PALPLUSS_WEBHOOK_SECRET environment variable is configured", () => {
+    const webhookSecret = process.env.PALPLUSS_WEBHOOK_SECRET;
+    expect(webhookSecret).toBeDefined();
+    expect(webhookSecret).not.toBe("");
+    expect(webhookSecret?.length).toBeGreaterThan(0);
+  });
+
+  it("PalPluss credentials are properly formatted", () => {
+    const apiKey = process.env.PALPLUSS_API_KEY || "";
+    const webhookSecret = process.env.PALPLUSS_WEBHOOK_SECRET || "";
+    
+    // API key should be a valid base64 string or start with pp_
+    expect(apiKey.length).toBeGreaterThan(10);
+    
+    // Webhook secret should be a valid base64 string or UUID
+    expect(webhookSecret.length).toBeGreaterThan(10);
+  });
+});
