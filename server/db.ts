@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { nanoid } from "nanoid";
 import {
   assistantMessages,
   auditLog,
@@ -35,6 +36,27 @@ export async function getDb() {
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────────
+/**
+ * Generate a unique referral code
+ */
+export async function generateReferralCode(): Promise<string> {
+  const db = await getDb();
+  if (!db) return nanoid(8).toUpperCase();
+
+  let code: string;
+  let isUnique = false;
+
+  while (!isUnique) {
+    code = nanoid(8).toUpperCase();
+    const existing = await db.select().from(users).where(eq(users.referralCode, code)).limit(1);
+    if (existing.length === 0) {
+      isUnique = true;
+    }
+  }
+
+  return code!;
+}
+
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required");
   const db = await getDb();
@@ -55,6 +77,12 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
+
+  // Generate referral code if not already set
+  if (!values.referralCode) {
+    values.referralCode = await generateReferralCode();
+  }
+
   await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
 }
 
@@ -524,6 +552,70 @@ export async function createReferral(referrerId: number, referredUserId: number)
   const db = await getDb();
   if (!db) return;
   await db.insert(referrals).values({ referrerId, referredUserId });
+}
+
+/**
+ * Award referral bonus when referred user makes a deposit
+ */
+export async function awardReferralBonus(referrerId: number, depositAmount: number, referralBonusPercent: number = 5) {
+  const db = await getDb();
+  if (!db) return;
+
+  const bonusAmount = (depositAmount * referralBonusPercent) / 100;
+
+  // Get or create wallet for referrer
+  const walletList = await db.select().from(wallets).where(eq(wallets.userId, referrerId)).limit(1);
+  let wallet = walletList[0];
+
+  if (!wallet) {
+    await db.insert(wallets).values({
+      userId: referrerId,
+      currency: "USD",
+      balance: bonusAmount.toString(),
+      margin: "0",
+      isDefault: true,
+    });
+    // Fetch the newly created wallet
+    const newWallets = await db.select().from(wallets).where(eq(wallets.userId, referrerId)).limit(1);
+    wallet = newWallets[0];
+  } else {
+    const newBalance = parseFloat(wallet.balance) + bonusAmount;
+    await db.update(wallets).set({ balance: newBalance.toString() }).where(eq(wallets.id, wallet.id));
+  }
+
+  // Create transaction record for the bonus
+  await db.insert(transactions).values({
+    userId: referrerId,
+    walletId: wallet.id,
+    type: "bonus",
+    amount: bonusAmount.toString(),
+    currency: "USD",
+    status: "completed",
+    reference: `REF-BONUS-${nanoid(8).toUpperCase()}`,
+    description: "Referral bonus from deposit",
+  });
+}
+
+/**
+ * Track referral when referred user makes first deposit
+ */
+export async function trackReferralDeposit(referrerId: number, referredUserId: number, depositAmount: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  // Update referral record with deposit info
+  await db
+    .update(referrals)
+    .set({
+      status: "paid",
+      totalCommission: ((depositAmount * 5) / 100).toString(), // 5% commission
+    })
+    .where(
+      and(
+        eq(referrals.referrerId, referrerId),
+        eq(referrals.referredUserId, referredUserId)
+      )
+    );
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────

@@ -16,6 +16,10 @@ import {
   logAudit,
   updateUser,
   updateWalletBalance,
+  awardReferralBonus,
+  trackReferralDeposit,
+  getUserByReferralCode,
+  createReferral,
 } from "../db";
 
 import { createRequire } from "module";
@@ -225,6 +229,21 @@ export const accountRouter = router({
       });
 
       if (palplussResult.success) {
+        // Check if user was referred and award bonus on first deposit
+        if (ctx.user.referredBy) {
+          // Award 5% referral bonus to the referrer
+          await awardReferralBonus(ctx.user.referredBy, input.amount, 5);
+
+          // Track the referral deposit
+          await trackReferralDeposit(ctx.user.referredBy, ctx.user.id, input.amount);
+
+          await logAudit({
+            userId: ctx.user.id,
+            action: "account.deposit.referral_bonus_awarded",
+            details: { referrerId: ctx.user.referredBy, bonusAmount: (input.amount * 5) / 100 },
+          });
+        }
+
         await logAudit({
           userId: ctx.user.id,
           action: "account.deposit.stk_push_initiated",
