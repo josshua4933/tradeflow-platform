@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,14 +15,19 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  if (!user) {
-    setLocation("/");
-    return null;
-  }
+  useEffect(() => {
+    if (!user) {
+      setLocation("/");
+      return;
+    }
 
-  // Enforce admin role-gating
-  if (user.role !== "admin") {
-    setLocation("/dashboard");
+    if (user.role !== "admin") {
+      setLocation("/dashboard");
+      return;
+    }
+  }, [user, setLocation]);
+
+  if (!user || user.role !== "admin") {
     return null;
   }
 
