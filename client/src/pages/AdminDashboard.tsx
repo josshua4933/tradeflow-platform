@@ -1,6 +1,4 @@
-import { useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useLocation } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel";
 import AdminDepositsPanel from "@/components/admin/AdminDepositsPanel";
@@ -13,23 +11,6 @@ import AdminConfigPanel from "@/components/admin/AdminConfigPanel";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (!user) {
-      setLocation("/");
-      return;
-    }
-
-    if (user.role !== "admin") {
-      setLocation("/dashboard");
-      return;
-    }
-  }, [user, setLocation]);
-
-  if (!user || user.role !== "admin") {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -37,7 +18,7 @@ export default function AdminDashboard() {
         <div className="mb-8">
           <h1 className="text-5xl font-serif font-bold text-foreground mb-2">Admin Dashboard</h1>
           <p className="text-lg text-muted-foreground">Platform management and oversight</p>
-          <p className="text-sm text-muted-foreground mt-2">Current user: {user?.name} ({user?.email}) - Role: <span className="font-semibold">{user?.role}</span></p>
+          <p className="text-sm text-muted-foreground mt-2">Current user: {user?.name} ({user?.email})</p>
         </div>
 
         <Tabs defaultValue="analytics" className="w-full">
