@@ -15,6 +15,13 @@
       "when": 1778433282415,
       "tag": "0001_wealthy_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1785090897182,
+      "tag": "0002_numerous_the_fallen",
+      "breakpoints": true
     }
   ]
 }

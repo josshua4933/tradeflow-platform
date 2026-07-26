@@ -1,0 +1,42 @@
+CREATE TABLE `active_sessions` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`sessionId` varchar(128) NOT NULL,
+	`loginActivityId` int,
+	`ipAddress` varchar(64) NOT NULL,
+	`deviceName` varchar(128),
+	`browser` varchar(64),
+	`os` varchar(64),
+	`country` varchar(64),
+	`city` varchar(64),
+	`lastActivityAt` timestamp NOT NULL DEFAULT (now()),
+	`expiresAt` timestamp NOT NULL,
+	`isActive` boolean NOT NULL DEFAULT true,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `active_sessions_id` PRIMARY KEY(`id`),
+	CONSTRAINT `active_sessions_sessionId_unique` UNIQUE(`sessionId`)
+);
+--> statement-breakpoint
+CREATE TABLE `login_activity` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`ipAddress` varchar(64) NOT NULL,
+	`userAgent` text NOT NULL,
+	`deviceName` varchar(128),
+	`deviceType` enum('desktop','mobile','tablet','unknown') NOT NULL DEFAULT 'unknown',
+	`browser` varchar(64),
+	`browserVersion` varchar(32),
+	`os` varchar(64),
+	`osVersion` varchar(32),
+	`country` varchar(64),
+	`city` varchar(64),
+	`latitude` decimal(10,8),
+	`longitude` decimal(11,8),
+	`isSuccessful` boolean NOT NULL DEFAULT true,
+	`failureReason` varchar(256),
+	`sessionId` varchar(128),
+	`logoutAt` timestamp,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `login_activity_id` PRIMARY KEY(`id`),
+	CONSTRAINT `login_activity_sessionId_unique` UNIQUE(`sessionId`)
+);

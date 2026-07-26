@@ -20,6 +20,7 @@ import {
   trackReferralDeposit,
   getUserByReferralCode,
   createReferral,
+  getDb,
 } from "../db";
 
 import { createRequire } from "module";
@@ -315,5 +316,73 @@ export const accountRouter = router({
     .query(async ({ ctx, input }) => {
       const transactions = await getTransactionsByUserId(ctx.user.id, 1000);
       return transactions.find((t) => t.reference === input.transactionId) || null;
+    }),
+
+  // ─── Activity & Sessions ───────────────────────────────────────────────────
+  getLoginHistory: protectedProcedure
+    .input(z.object({ limit: z.number().default(50) }).optional())
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      
+      const { loginActivity } = await import("../../drizzle/schema");
+      const { eq, desc } = await import("drizzle-orm");
+      const history = await db
+        .select()
+        .from(loginActivity)
+        .where(eq(loginActivity.userId, ctx.user.id))
+        .orderBy(desc(loginActivity.createdAt))
+        .limit(50);
+      
+      return history;
+    }),
+
+  getActiveSessions: protectedProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      
+      const { activeSessions } = await import("../../drizzle/schema");
+      const { eq, and, desc } = await import("drizzle-orm");
+      const sessions = await db
+        .select()
+        .from(activeSessions)
+        .where(and(eq(activeSessions.userId, ctx.user.id), eq(activeSessions.isActive, true)))
+        .orderBy(desc(activeSessions.createdAt));
+      
+      return sessions;
+    }),
+
+  terminateSession: protectedProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      
+      const { activeSessions } = await import("../../drizzle/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      const session = await db
+        .select()
+        .from(activeSessions)
+        .where(eq(activeSessions.sessionId, input.sessionId))
+        .limit(1);
+      
+      if (!session.length || session[0].userId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Cannot terminate this session" });
+      }
+      
+      await db
+        .update(activeSessions)
+        .set({ isActive: false })
+        .where(eq(activeSessions.sessionId, input.sessionId));
+      
+      await logAudit({
+        userId: ctx.user.id,
+        action: "session.terminated",
+        details: { sessionId: input.sessionId },
+      });
+      
+      return { success: true };
     }),
 });

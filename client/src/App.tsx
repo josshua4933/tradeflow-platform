@@ -24,6 +24,7 @@ import AuditPage from "./pages/AuditPage";
 import EducationPage from "./pages/EducationPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import DepositConfirmation from "./pages/DepositConfirmation";
+import ActivityDashboard from "./pages/ActivityDashboard";
 
 function Router() {
   return (
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/account" component={AccountPage} />
       <Route path="/wallets" component={WalletsPage} />
       <Route path="/deposit-confirmation" component={DepositConfirmation} />
+      <Route path="/activity" component={ActivityDashboard} />
       <Route path="/history" component={HistoryPage} />
       <Route path="/leaderboard" component={LeaderboardPage} />
       <Route path="/signals" component={SignalsPage} />

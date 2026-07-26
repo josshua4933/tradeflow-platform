@@ -9,7 +9,7 @@ import {
   LayoutDashboard, TrendingUp, Wallet, History, Users, Zap,
   Calendar, MessageSquare, Bell, User, LogOut, Settings,
   BarChart2, Award, BookOpen, Link2, FileText, Shield,
-  ChevronDown, Menu, X, AlertTriangle, Lock
+  ChevronDown, Menu, X, AlertTriangle, Lock, Activity
 } from "lucide-react";
 
 interface NavItem {
@@ -39,6 +39,7 @@ const getNavGroups = (isAdmin: boolean) => [
     items: [
       { icon: <Wallet className="h-4 w-4" />, label: "Wallets", href: "/wallets" },
       { icon: <Settings className="h-4 w-4" />, label: "Account", href: "/account" },
+      { icon: <Activity className="h-4 w-4" />, label: "Activity", href: "/activity" },
     ],
   },
   {

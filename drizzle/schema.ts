@@ -263,3 +263,44 @@ export const assistantMessages = mysqlTable("assistant_messages", {
   content: text("content").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+// ─── Login Activity ───────────────────────────────────────────────────────────
+export const loginActivity = mysqlTable("login_activity", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  ipAddress: varchar("ipAddress", { length: 64 }).notNull(),
+  userAgent: text("userAgent").notNull(),
+  deviceName: varchar("deviceName", { length: 128 }),
+  deviceType: mysqlEnum("deviceType", ["desktop", "mobile", "tablet", "unknown"]).default("unknown").notNull(),
+  browser: varchar("browser", { length: 64 }),
+  browserVersion: varchar("browserVersion", { length: 32 }),
+  os: varchar("os", { length: 64 }),
+  osVersion: varchar("osVersion", { length: 32 }),
+  country: varchar("country", { length: 64 }),
+  city: varchar("city", { length: 64 }),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
+  isSuccessful: boolean("isSuccessful").default(true).notNull(),
+  failureReason: varchar("failureReason", { length: 256 }),
+  sessionId: varchar("sessionId", { length: 128 }).unique(),
+  logoutAt: timestamp("logoutAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Active Sessions ──────────────────────────────────────────────────────────
+export const activeSessions = mysqlTable("active_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  sessionId: varchar("sessionId", { length: 128 }).notNull().unique(),
+  loginActivityId: int("loginActivityId"),
+  ipAddress: varchar("ipAddress", { length: 64 }).notNull(),
+  deviceName: varchar("deviceName", { length: 128 }),
+  browser: varchar("browser", { length: 64 }),
+  os: varchar("os", { length: 64 }),
+  country: varchar("country", { length: 64 }),
+  city: varchar("city", { length: 64 }),
+  lastActivityAt: timestamp("lastActivityAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
