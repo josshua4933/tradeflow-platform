@@ -166,7 +166,7 @@ export default function AccountSettings() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-muted-foreground">Account Type:</span> <span className="font-medium">Standard</span></div>
+              <div><span className="text-muted-foreground">Account Type:</span> <span className="font-medium capitalize">{user?.role === "admin" ? "Admin" : "Standard"}</span></div>
               <div><span className="text-muted-foreground">Member Since:</span> <span className="font-medium">{user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}</span></div>
             </div>
           </div>
