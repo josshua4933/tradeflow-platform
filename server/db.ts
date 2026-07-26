@@ -57,7 +57,7 @@ export async function generateReferralCode(): Promise<string> {
   return code!;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
+export async function upsertUser(user: InsertUser): Promise<User | undefined> {
   if (!user.openId) throw new Error("User openId is required");
   const db = await getDb();
   if (!db) return;
@@ -84,6 +84,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 
   await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  
+  // Return the fresh user data from DB (including role)
+  return getUserByOpenId(user.openId);
 }
 
 export async function getUserByOpenId(openId: string): Promise<User | undefined> {

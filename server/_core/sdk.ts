@@ -301,12 +301,12 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    await db.upsertUser({
+    const updatedUser = await db.upsertUser({
       openId: user.openId,
       lastSignedIn: signedInAt,
     });
 
-    return user;
+    return updatedUser || user;
   }
 }
 
