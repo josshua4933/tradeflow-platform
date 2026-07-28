@@ -142,9 +142,11 @@ export default function Dashboard() {
               </div>
               <div className="space-y-2">
                 {displayPrices?.slice(0, 3).map((p: any) => {
-                  const changePercent = p.changePercent24h ?? 0;
+                  if (!p || !p.symbol) return null;
+                  const changePercent = typeof p.changePercent24h === 'string' ? parseFloat(p.changePercent24h) : (p.changePercent24h ?? 0);
                   const isPositive = changePercent >= 0;
                   const price = typeof p.price === 'string' ? parseFloat(p.price) : p.price;
+                  if (isNaN(price)) return null;
                   return (
                     <button key={p.symbol} onClick={() => navigate(`/trade/${p.symbol}`)}
                       className="w-full flex items-center justify-between p-2.5 border border-border hover:border-foreground/30 hover:bg-secondary/50 transition-colors text-left">
