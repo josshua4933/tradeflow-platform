@@ -1,5 +1,8 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useLocation } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel";
 import AdminDepositsPanel from "@/components/admin/AdminDepositsPanel";
 import AdminWithdrawalsPanel from "@/components/admin/AdminWithdrawalsPanel";
@@ -11,11 +14,21 @@ import AdminConfigPanel from "@/components/admin/AdminConfigPanel";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
 
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-12">
         <div className="mb-12">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/")}
+            className="mb-4 gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
           <h1 className="text-5xl font-serif font-bold text-foreground mb-3">Admin Dashboard</h1>
           <p className="text-lg text-muted-foreground mb-2">Platform management and oversight</p>
           <p className="text-sm text-muted-foreground">Current user: {user?.name} ({user?.email})</p>
