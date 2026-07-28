@@ -39,6 +39,24 @@ interface Notification {
   timestamp: number;
 }
 
+interface Candle {
+  symbol: string;
+  interval: string;
+  openTime: number;
+  closeTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  quoteAssetVolume: number;
+  numberOfTrades: number;
+  takerBuyBaseAssetVolume: number;
+  takerBuyQuoteAssetVolume: number;
+  isClosed: boolean;
+  timestamp: number;
+}
+
 export function useWebSocket() {
   const socketRef = useRef<Socket | null>(null);
   const { user } = useAuth();
@@ -47,6 +65,7 @@ export function useWebSocket() {
   const [orderConfirmations, setOrderConfirmations] = useState<OrderConfirmation[]>([]);
   const [tradeExecutions, setTradeExecutions] = useState<TradeExecution[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [candles, setCandles] = useState<Map<string, Candle>>(new Map());
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -108,6 +127,14 @@ export function useWebSocket() {
       setNotifications((prev) => [data, ...prev].slice(0, 50));
     });
 
+    // Candlestick updates
+    socket.on("candle_update", (data: Candle) => {
+      setCandles((prev) => {
+        const key = `${data.symbol}:${data.interval}`;
+        return new Map(prev).set(key, data);
+      });
+    });
+
     // Errors
     socket.on("error", (error) => {
       console.error("[WebSocket] Error:", error);
@@ -142,6 +169,18 @@ export function useWebSocket() {
     return Array.from(prices.values());
   }, [prices]);
 
+  // Subscribe to candles
+  const subscribeToCandles = useCallback((symbol: string, interval: string = "1m") => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("subscribe_klines", { symbol, interval });
+    }
+  }, []);
+
+  // Get candle for symbol and interval
+  const getCandle = useCallback((symbol: string, interval: string = "1m"): Candle | undefined => {
+    return candles.get(`${symbol}:${interval}`);
+  }, [candles]);
+
   return {
     isConnected,
     prices: getPricesArray(),
@@ -151,5 +190,8 @@ export function useWebSocket() {
     orderConfirmations,
     tradeExecutions,
     notifications,
+    candles: Array.from(candles.values()),
+    getCandle,
+    subscribeToCandles,
   };
 }

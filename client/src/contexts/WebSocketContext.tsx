@@ -38,6 +38,24 @@ interface Notification {
   timestamp: number;
 }
 
+interface Candle {
+  symbol: string;
+  interval: string;
+  openTime: number;
+  closeTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  quoteAssetVolume: number;
+  numberOfTrades: number;
+  takerBuyBaseAssetVolume: number;
+  takerBuyQuoteAssetVolume: number;
+  isClosed: boolean;
+  timestamp: number;
+}
+
 interface WebSocketContextType {
   isConnected: boolean;
   prices: PriceUpdate[];
@@ -47,6 +65,9 @@ interface WebSocketContextType {
   orderConfirmations: OrderConfirmation[];
   tradeExecutions: TradeExecution[];
   notifications: Notification[];
+  candles: Candle[];
+  getCandle: (symbol: string, interval: string) => Candle | undefined;
+  subscribeToCandles: (symbol: string, interval: string) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);

@@ -13,6 +13,7 @@ import { registerStripeWebhook } from "../stripeWebhook";
 import { handlePalPlusWebhook } from "../palPlusWebhook";
 import { initializeWebSocket, startPriceStreaming } from "../websocket";
 import { initializeBinanceStream } from "../binanceStream";
+import { initializeBinanceKlines } from "../binanceKlines";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -43,6 +44,9 @@ async function startServer() {
   
   // Initialize Binance WebSocket streaming
   initializeBinanceStream();
+  
+  // Initialize Binance klines (candlestick) streaming
+  initializeBinanceKlines();
   // Register Stripe webhook BEFORE express.json() for raw body signature verification
   registerStripeWebhook(app);
   // Register PalPlus webhook BEFORE express.json() for signature verification
