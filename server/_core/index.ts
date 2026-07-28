@@ -11,6 +11,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerStripeWebhook } from "../stripeWebhook";
 import { handlePalPlusWebhook } from "../palPlusWebhook";
+import { initializeWebSocket, startPriceStreaming } from "../websocket";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -34,6 +35,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  
+  // Initialize WebSocket
+  initializeWebSocket(server);
+  startPriceStreaming();
   // Register Stripe webhook BEFORE express.json() for raw body signature verification
   registerStripeWebhook(app);
   // Register PalPlus webhook BEFORE express.json() for signature verification
@@ -57,7 +62,7 @@ async function startServer() {
   } else {
     serveStatic(app);
   }
-
+  
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
 
@@ -67,6 +72,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    console.log(`WebSocket server ready for connections`);
   });
 }
 

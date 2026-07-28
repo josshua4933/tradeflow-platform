@@ -2,6 +2,7 @@ import TradingLayout from "@/components/TradingLayout";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import {
   TrendingUp, Activity, BarChart2, ChevronRight, Zap, AlertTriangle, ArrowRight
 } from "lucide-react";
@@ -24,17 +25,22 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const { data: summary } = trpc.trading.portfolioSummary.useQuery(undefined, { refetchInterval: 5000 });
   const { data: openTrades } = trpc.trading.openTrades.useQuery(undefined, { refetchInterval: 5000 });
-  // Try to fetch real-time prices from Binance
+  
+  // Get real-time prices from WebSocket
+  const { prices: wsPrices, isConnected } = useWebSocketContext();
+  
+  // Fallback to tRPC if WebSocket not connected
   const { data: binancePrices } = trpc.market.binancePrices.useQuery(
     { symbols: ["EURUSD", "BTCUSD", "XAUUSD", "GBPUSD", "US500"] },
-    { refetchInterval: 5000 }
+    { refetchInterval: isConnected ? 0 : 5000, enabled: !isConnected }
   );
   const { data: prices } = trpc.market.prices.useQuery(
     { symbols: ["EURUSD", "BTCUSD", "XAUUSD", "GBPUSD", "US500"] },
-    { refetchInterval: 3000 }
+    { refetchInterval: isConnected ? 0 : 3000, enabled: !isConnected }
   );
-  // Use Binance prices if available, otherwise fallback to simulated
-  const displayPrices = binancePrices && binancePrices.length > 0 ? binancePrices : prices;
+  
+  // Prioritize WebSocket prices, then Binance, then fallback
+  const displayPrices = wsPrices && wsPrices.length > 0 ? wsPrices : (binancePrices && binancePrices.length > 0 ? binancePrices : prices);
   const { data: signals } = trpc.market.signals.useQuery();
   const { data: notifications } = trpc.notifications.list.useQuery({ limit: 5 });
 
