@@ -22,6 +22,8 @@ import {
   createReferral,
   getDb,
 } from "../db";
+import { wallets } from "../../drizzle/schema";
+import { and, eq } from "drizzle-orm";
 
 import { createRequire } from "module";
 const _require = createRequire(import.meta.url);
@@ -384,5 +386,84 @@ export const accountRouter = router({
       });
       
       return { success: true };
+    }),
+
+  // ─── Withdrawal ────────────────────────────────────────────────────────────
+  createWithdrawal: protectedProcedure
+    .input(
+      z.object({
+        amount: z.number().min(1).max(1000000),
+        walletId: z.number(),
+        phoneNumber: z.string().min(10),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      // Verify wallet belongs to user
+      const wallet = await db
+        .select()
+        .from(wallets)
+        .where(and(eq(wallets.id, input.walletId), eq(wallets.userId, ctx.user.id)))
+        .limit(1);
+
+      if (!wallet.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Wallet not found" });
+      }
+
+      const walletBalance = parseFloat(wallet[0].balance);
+      if (walletBalance < input.amount) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Insufficient balance" });
+      }
+
+      try {
+        const reference = `WD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+        
+        // Create withdrawal transaction
+        await createTransaction({
+          userId: ctx.user.id,
+          walletId: input.walletId,
+          type: "withdrawal",
+          amount: input.amount.toString(),
+          currency: wallet[0].currency,
+          status: "pending",
+          reference,
+          metadata: {
+            phoneNumber: input.phoneNumber,
+          },
+        });
+
+        // Deduct from wallet
+        await updateWalletBalance(input.walletId, (walletBalance - input.amount).toString());
+
+        // Log audit
+        await logAudit({
+          userId: ctx.user.id,
+          action: "withdrawal.initiated",
+          details: {
+            amount: input.amount,
+            currency: wallet[0].currency,
+            phoneNumber: input.phoneNumber,
+            reference,
+          },
+        });
+
+        // Send notification
+        await createNotification({
+          userId: ctx.user.id,
+          title: "Withdrawal Initiated",
+          message: `Your withdrawal of $${input.amount} has been initiated. You will receive confirmation on ${input.phoneNumber}.`,
+          type: "withdrawal_update",
+        });
+
+        return {
+          success: true,
+          reference,
+        };
+      } catch (error) {
+        console.error("Withdrawal error:", error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to process withdrawal" });
+      }
     }),
 });

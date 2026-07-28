@@ -25,15 +25,46 @@ export default function WalletsPanel() {
   const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState("USD");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [withdrawalAmount, setWithdrawalAmount] = useState("");
+  const [withdrawalPhone, setWithdrawalPhone] = useState("");
+  const [selectedWithdrawalWallet, setSelectedWithdrawalWallet] = useState<number | null>(null);
 
   const { data: wallets, isLoading: walletsLoading } = trpc.account.wallets.useQuery();
   const depositMutation = trpc.account.createDepositIntent.useMutation();
+  const withdrawalMutation = trpc.account.createWithdrawal.useMutation();
   const transactionsMutation = trpc.account.transactions.useQuery({ limit: 50 });
 
   const KSH_RATE = 130;
   const currencyData = SUPPORTED_CURRENCIES.find((c) => c.code === selectedCurrency);
   const usdEquivalent = depositAmount ? parseFloat(depositAmount) / (currencyData?.rate || 1) : 0;
   const amountInKSH = depositAmount ? Math.round(usdEquivalent * KSH_RATE) : 0;
+
+  const handleWithdrawal = async () => {
+    if (!withdrawalAmount || !selectedWithdrawalWallet || !withdrawalPhone) {
+      toast.error("Please enter amount, phone number, and select wallet");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const result = await withdrawalMutation.mutateAsync({
+        amount: parseFloat(withdrawalAmount),
+        walletId: selectedWithdrawalWallet,
+        phoneNumber: withdrawalPhone,
+      });
+
+      if (result.success) {
+        toast.success(`Withdrawal of $${withdrawalAmount} initiated! Check your phone for confirmation.`);
+        setWithdrawalAmount("");
+        setWithdrawalPhone("");
+        setSelectedWithdrawalWallet(null);
+      }
+    } catch (error: any) {
+      toast.error("Failed to process withdrawal. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleDeposit = async () => {
     if (!depositAmount || !selectedWallet || !phoneNumber) {
@@ -106,6 +137,76 @@ export default function WalletsPanel() {
           ) : (
             <p className="text-muted-foreground">No wallets found</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Withdrawal */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-serif text-2xl">Withdraw Funds</CardTitle>
+          <CardDescription>Withdraw funds from your trading account</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="withdrawal-wallet">Select Wallet</Label>
+            <select
+              id="withdrawal-wallet"
+              value={selectedWithdrawalWallet || ""}
+              onChange={(e) => setSelectedWithdrawalWallet(e.target.value ? parseInt(e.target.value) : null)}
+              disabled={isProcessing}
+              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
+            >
+              <option value="">Choose a wallet...</option>
+              {wallets?.map((wallet) => (
+                <option key={wallet.id} value={wallet.id}>
+                  {wallet.currency} - ${parseFloat(wallet.balance).toFixed(2)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <Label htmlFor="withdrawal-amount">Amount (USD)</Label>
+            <Input
+              id="withdrawal-amount"
+              type="number"
+              placeholder="Enter amount"
+              value={withdrawalAmount}
+              onChange={(e) => setWithdrawalAmount(e.target.value)}
+              min="1"
+              max="100000"
+              disabled={isProcessing}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Minimum: $1 | Maximum: $100,000</p>
+          </div>
+
+          <div>
+            <Label htmlFor="withdrawal-phone">Phone Number</Label>
+            <Input
+              id="withdrawal-phone"
+              type="tel"
+              placeholder="Enter your phone number"
+              value={withdrawalPhone}
+              onChange={(e) => setWithdrawalPhone(e.target.value)}
+              disabled={isProcessing}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Confirmation will be sent to this number</p>
+          </div>
+
+          <Button
+            onClick={handleWithdrawal}
+            disabled={!selectedWithdrawalWallet || !withdrawalAmount || !withdrawalPhone || isProcessing}
+            className="w-full"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing Withdrawal...
+              </>
+            ) : (
+              "Initiate Withdrawal"
+            )}
+          </Button>
         </CardContent>
       </Card>
 
