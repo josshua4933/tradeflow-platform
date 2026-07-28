@@ -144,6 +144,7 @@ export default function Dashboard() {
                 {displayPrices?.slice(0, 3).map((p: any) => {
                   const changePercent = p.changePercent24h ?? 0;
                   const isPositive = changePercent >= 0;
+                  const price = typeof p.price === 'string' ? parseFloat(p.price) : p.price;
                   return (
                     <button key={p.symbol} onClick={() => navigate(`/trade/${p.symbol}`)}
                       className="w-full flex items-center justify-between p-2.5 border border-border hover:border-foreground/30 hover:bg-secondary/50 transition-colors text-left">
@@ -154,7 +155,7 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <span className="text-sm tabular-nums font-medium">
-                        {p.price > 1000 ? p.price.toLocaleString("en-US", { minimumFractionDigits: 2 }) : p.price.toFixed(5)}
+                        {price > 1000 ? price.toLocaleString("en-US", { minimumFractionDigits: 2 }) : price.toFixed(5)}
                       </span>
                     </button>
                   );
