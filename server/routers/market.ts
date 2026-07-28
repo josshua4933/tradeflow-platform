@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { getInstruments, getInstrumentBySymbol, getTradingSignals, getEconomicEvents } from "../db";
+import { getCachedPrices } from "../binance";
 
 // ─── Price Simulation Engine ──────────────────────────────────────────────────
 // Base prices for all instruments
@@ -148,6 +149,23 @@ export const marketRouter = router({
       synthetic: { isOpen: true, session: "24/7" },
     };
   }),
+
+  binancePrices: publicProcedure
+    .input(z.object({ symbols: z.array(z.string()) }))
+    .query(async ({ input }) => {
+      try {
+        const prices = await getCachedPrices(input.symbols);
+        return prices;
+      } catch (error) {
+        console.error("Failed to fetch Binance prices:", error);
+        // Fallback to simulated prices if Binance fails
+        return input.symbols.map((symbol) => ({
+          symbol,
+          ...getCurrentPrice(symbol),
+          timestamp: Date.now(),
+        }));
+      }
+    }),
 });
 
 function getForexSession(utcHour: number): string {

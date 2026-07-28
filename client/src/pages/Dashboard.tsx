@@ -24,10 +24,17 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const { data: summary } = trpc.trading.portfolioSummary.useQuery(undefined, { refetchInterval: 5000 });
   const { data: openTrades } = trpc.trading.openTrades.useQuery(undefined, { refetchInterval: 5000 });
+  // Try to fetch real-time prices from Binance
+  const { data: binancePrices } = trpc.market.binancePrices.useQuery(
+    { symbols: ["EURUSD", "BTCUSD", "XAUUSD", "GBPUSD", "US500"] },
+    { refetchInterval: 5000 }
+  );
   const { data: prices } = trpc.market.prices.useQuery(
     { symbols: ["EURUSD", "BTCUSD", "XAUUSD", "GBPUSD", "US500"] },
     { refetchInterval: 3000 }
   );
+  // Use Binance prices if available, otherwise fallback to simulated
+  const displayPrices = binancePrices && binancePrices.length > 0 ? binancePrices : prices;
   const { data: signals } = trpc.market.signals.useQuery();
   const { data: notifications } = trpc.notifications.list.useQuery({ limit: 5 });
 
@@ -128,15 +135,24 @@ export default function Dashboard() {
                 <span className="text-sm font-semibold">Quick Trade</span>
               </div>
               <div className="space-y-2">
-                {prices?.slice(0, 3).map((p) => (
-                  <button key={p.symbol} onClick={() => navigate(`/trade/${p.symbol}`)}
-                    className="w-full flex items-center justify-between p-2.5 border border-border hover:border-foreground/30 hover:bg-secondary/50 transition-colors text-left">
-                    <span className="text-sm font-medium">{p.symbol}</span>
-                    <span className="text-sm tabular-nums font-medium">
-                      {p.price > 1000 ? p.price.toLocaleString("en-US", { minimumFractionDigits: 2 }) : p.price.toFixed(5)}
-                    </span>
-                  </button>
-                ))}
+                {displayPrices?.slice(0, 3).map((p: any) => {
+                  const changePercent = p.changePercent24h ?? 0;
+                  const isPositive = changePercent >= 0;
+                  return (
+                    <button key={p.symbol} onClick={() => navigate(`/trade/${p.symbol}`)}
+                      className="w-full flex items-center justify-between p-2.5 border border-border hover:border-foreground/30 hover:bg-secondary/50 transition-colors text-left">
+                      <div>
+                        <span className="text-sm font-medium block">{p.symbol}</span>
+                        <span className={`text-xs ${isPositive ? "text-bull" : "text-bear"}`}>
+                          {isPositive ? "▲" : "▼"} {Math.abs(changePercent).toFixed(2)}%
+                        </span>
+                      </div>
+                      <span className="text-sm tabular-nums font-medium">
+                        {p.price > 1000 ? p.price.toLocaleString("en-US", { minimumFractionDigits: 2 }) : p.price.toFixed(5)}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               <Button className="w-full mt-3" size="sm" onClick={() => navigate("/trade")}>
                 Open Terminal <ArrowRight className="ml-1 h-3 w-3" />

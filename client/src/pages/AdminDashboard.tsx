@@ -14,15 +14,15 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-8">
-        <div className="mb-8">
-          <h1 className="text-5xl font-serif font-bold text-foreground mb-2">Admin Dashboard</h1>
-          <p className="text-lg text-muted-foreground">Platform management and oversight</p>
-          <p className="text-sm text-muted-foreground mt-2">Current user: {user?.name} ({user?.email})</p>
+      <div className="container mx-auto px-4 py-12">
+        <div className="mb-12">
+          <h1 className="text-5xl font-serif font-bold text-foreground mb-3">Admin Dashboard</h1>
+          <p className="text-lg text-muted-foreground mb-2">Platform management and oversight</p>
+          <p className="text-sm text-muted-foreground">Current user: {user?.name} ({user?.email})</p>
         </div>
 
         <Tabs defaultValue="analytics" className="w-full">
-          <TabsList className="grid w-full grid-cols-8 mb-8 overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-8 mb-12 overflow-x-auto gap-1">
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="deposits">Deposits</TabsTrigger>
@@ -33,35 +33,35 @@ export default function AdminDashboard() {
             <TabsTrigger value="config">Configuration</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="analytics">
+          <TabsContent value="analytics" className="mt-8">
             <AdminAnalyticsPanel />
           </TabsContent>
 
-          <TabsContent value="users">
+          <TabsContent value="users" className="mt-8">
             <AdminUsersPanel />
           </TabsContent>
 
-          <TabsContent value="deposits">
+          <TabsContent value="deposits" className="mt-8">
             <AdminDepositsPanel />
           </TabsContent>
 
-          <TabsContent value="withdrawals">
+          <TabsContent value="withdrawals" className="mt-8">
             <AdminWithdrawalsPanel />
           </TabsContent>
 
-          <TabsContent value="kyc">
+          <TabsContent value="kyc" className="mt-8">
             <AdminKycPanel />
           </TabsContent>
 
-          <TabsContent value="audit">
+          <TabsContent value="audit" className="mt-8">
             <AdminAuditLogPanel />
           </TabsContent>
 
-          <TabsContent value="bulk">
+          <TabsContent value="bulk" className="mt-8">
             <AdminBulkActionsPanel />
           </TabsContent>
 
-          <TabsContent value="config">
+          <TabsContent value="config" className="mt-8">
             <AdminConfigPanel />
           </TabsContent>
         </Tabs>
