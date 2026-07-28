@@ -12,6 +12,7 @@ import { serveStatic, setupVite } from "./vite";
 import { registerStripeWebhook } from "../stripeWebhook";
 import { handlePalPlusWebhook } from "../palPlusWebhook";
 import { initializeWebSocket, startPriceStreaming } from "../websocket";
+import { initializeBinanceStream } from "../binanceStream";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -39,6 +40,9 @@ async function startServer() {
   // Initialize WebSocket
   initializeWebSocket(server);
   startPriceStreaming();
+  
+  // Initialize Binance WebSocket streaming
+  initializeBinanceStream();
   // Register Stripe webhook BEFORE express.json() for raw body signature verification
   registerStripeWebhook(app);
   // Register PalPlus webhook BEFORE express.json() for signature verification
