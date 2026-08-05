@@ -18,15 +18,23 @@ interface Candle {
   isClosed: boolean;
 }
 
+// Major trading pairs to auto-subscribe to
+const DEFAULT_PAIRS = [
+  "EURUSD", "BTCUSD", "ETHUSD", "XAUUSD", "GBPUSD",
+  "AUDUSD", "USDJPY", "XAGUSD", "BNBUSD", "ADAUSD"
+];
+
 let klinesWs: WebSocket | null = null;
 let isConnected = false;
 let subscriptions = new Set<string>();
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 /**
  * Initialize Binance klines WebSocket connection
  */
 export function initializeBinanceKlines() {
-  if (klinesWs) {
+  if (klinesWs && isConnected) {
     console.log("[BinanceKlines] Already connected");
     return;
   }
@@ -37,8 +45,15 @@ export function initializeBinanceKlines() {
     klinesWs = new WebSocket("wss://stream.binance.com:9443/ws");
 
     klinesWs.on("open", () => {
-      console.log("[BinanceKlines] Connected to Binance");
+      console.log("[BinanceKlines] Connected to Binance WebSocket");
       isConnected = true;
+      reconnectAttempts = 0;
+      
+      // Auto-subscribe to default pairs on 1m timeframe
+      console.log("[BinanceKlines] Auto-subscribing to default pairs...");
+      DEFAULT_PAIRS.forEach(pair => {
+        subscribeToKlines(pair, "1m");
+      });
     });
 
     klinesWs.on("message", (data: string) => {
@@ -51,7 +66,7 @@ export function initializeBinanceKlines() {
     });
 
     klinesWs.on("error", (error: Error) => {
-      console.error("[BinanceKlines] WebSocket error:", error);
+      console.error("[BinanceKlines] WebSocket error:", error.message);
       isConnected = false;
     });
 
@@ -60,10 +75,17 @@ export function initializeBinanceKlines() {
       isConnected = false;
       klinesWs = null;
 
-      // Reconnect after 3 seconds
-      setTimeout(() => {
-        initializeBinanceKlines();
-      }, 3000);
+      // Attempt reconnection with exponential backoff
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+        reconnectAttempts++;
+        console.log(`[BinanceKlines] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+        setTimeout(() => {
+          initializeBinanceKlines();
+        }, delay);
+      } else {
+        console.error("[BinanceKlines] Max reconnection attempts reached");
+      }
     });
   } catch (error) {
     console.error("[BinanceKlines] Failed to initialize:", error);
@@ -77,7 +99,7 @@ export function initializeBinanceKlines() {
  */
 export function subscribeToKlines(symbol: string, interval: string = "1m") {
   if (!klinesWs || klinesWs.readyState !== WebSocket.OPEN) {
-    console.error("[BinanceKlines] WebSocket not ready");
+    console.warn(`[BinanceKlines] WebSocket not ready for ${symbol}:${interval}`);
     return;
   }
 
@@ -95,9 +117,13 @@ export function subscribeToKlines(symbol: string, interval: string = "1m") {
     id: Date.now(),
   };
 
-  klinesWs.send(JSON.stringify(subscription));
-  subscriptions.add(subscriptionKey);
-  console.log(`[BinanceKlines] Subscribed to ${symbol} ${interval} candles`);
+  try {
+    klinesWs.send(JSON.stringify(subscription));
+    subscriptions.add(subscriptionKey);
+    console.log(`[BinanceKlines] Subscribed to ${symbol} ${interval} candles`);
+  } catch (error) {
+    console.error(`[BinanceKlines] Failed to subscribe to ${subscriptionKey}:`, error);
+  }
 }
 
 /**
@@ -117,9 +143,13 @@ export function unsubscribeFromKlines(symbol: string, interval: string = "1m") {
     id: Date.now(),
   };
 
-  klinesWs.send(JSON.stringify(subscription));
-  subscriptions.delete(subscriptionKey);
-  console.log(`[BinanceKlines] Unsubscribed from ${symbol} ${interval}`);
+  try {
+    klinesWs.send(JSON.stringify(subscription));
+    subscriptions.delete(subscriptionKey);
+    console.log(`[BinanceKlines] Unsubscribed from ${symbol} ${interval}`);
+  } catch (error) {
+    console.error(`[BinanceKlines] Failed to unsubscribe from ${subscriptionKey}:`, error);
+  }
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,14 +8,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { TrendingUp, TrendingDown, X, RefreshCw, ChevronDown, BarChart2, Activity } from "lucide-react";
 import { createChart, ColorType, CrosshairMode, LineStyle, CandlestickSeries } from "lightweight-charts";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 
 // ─── Chart Component ─────────────────────────────────────────────────────────
 function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
+  const { candles: wsCandles, subscribeToCandles, getCandle } = useWebSocketContext();
   const { data: candles } = trpc.market.candles.useQuery({ symbol, timeframe: timeframe as any }, { refetchInterval: 10000 });
   const { data: prices } = trpc.market.prices.useQuery({ symbols: [symbol] }, { refetchInterval: 2000 });
+
+  // Subscribe to WebSocket candle updates
+  useEffect(() => {
+    subscribeToCandles(symbol, timeframe);
+  }, [symbol, timeframe, subscribeToCandles]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -67,6 +74,7 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
     };
   }, []);
 
+  // Update chart with REST API candles (initial load)
   useEffect(() => {
     if (!candleSeriesRef.current || !candles || candles.length === 0) return;
     const data = candles.map((c: any) => ({
@@ -80,20 +88,36 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
     chartInstance.current?.timeScale().fitContent();
   }, [candles]);
 
+  // Update chart with WebSocket candles (real-time)
+  useEffect(() => {
+    const wsCandle = getCandle(symbol, timeframe);
+    if (!candleSeriesRef.current || !wsCandle) return;
+
+    const candleTime = Math.floor(wsCandle.openTime / 1000) as any;
+    candleSeriesRef.current.update({
+      time: candleTime,
+      open: wsCandle.open,
+      high: wsCandle.high,
+      low: wsCandle.low,
+      close: wsCandle.close,
+    });
+  }, [wsCandles, symbol, timeframe, getCandle]);
+
   // Update last candle with live price
   useEffect(() => {
-    if (!candleSeriesRef.current || !prices?.[0] || !candles?.length) return;
-    const lastCandle = candles[candles.length - 1];
+    if (!candleSeriesRef.current || !prices?.[0]) return;
     const livePrice = prices[0].price;
-    const toNum = (v: any) => typeof v === 'string' ? parseFloat(v) : v;
+    const wsCandle = getCandle(symbol, timeframe);
+    if (!wsCandle) return;
+
     candleSeriesRef.current.update({
-      time: Math.floor((lastCandle.time ?? Date.now()) / 1000) as any,
-      open: toNum(lastCandle.open),
-      high: Math.max(toNum(lastCandle.high), livePrice),
-      low: Math.min(toNum(lastCandle.low), livePrice),
+      time: Math.floor(wsCandle.openTime / 1000) as any,
+      open: wsCandle.open,
+      high: Math.max(wsCandle.high, livePrice),
+      low: Math.min(wsCandle.low, livePrice),
       close: livePrice,
     });
-  }, [prices]);
+  }, [prices, symbol, timeframe, getCandle]);
 
   return <div ref={chartRef} className="w-full h-full" />;
 }
@@ -199,21 +223,13 @@ function OrderPanel({ symbol, price }: { symbol: string; price: number }) {
       {riskCalc && (
         <div className="border border-border p-3 space-y-1 text-xs">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Margin Required</span>
-            <span className="tabular-nums font-medium">${riskCalc.margin}</span>
+            <span className="text-muted-foreground">Margin:</span>
+            <span className="font-semibold">${riskCalc.margin.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Pip Value</span>
-            <span className="tabular-nums font-medium">${riskCalc.pipValue}</span>
+            <span className="text-muted-foreground">Max Loss:</span>
+            <span className="font-semibold text-bear">${riskCalc.maxLoss.toFixed(2)}</span>
           </div>
-          {riskCalc.riskAmount !== "0.00" && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Risk Amount</span>
-              <span className={`tabular-nums font-medium ${parseFloat(riskCalc.riskPercent) > 2 ? "text-bear" : "text-bull"}`}>
-                ${riskCalc.riskAmount} ({riskCalc.riskPercent}%)
-              </span>
-            </div>
-          )}
         </div>
       )}
 
@@ -298,7 +314,7 @@ function PositionsPanel() {
                           className="text-muted-foreground hover:text-destructive transition-colors"
                           title="Close trade"
                         >
-                          <X className="h-3.5 w-3.5" />
+                          <X className="h-4 w-4" />
                         </button>
                       </td>
                     </tr>
@@ -308,7 +324,7 @@ function PositionsPanel() {
             </table>
           </div>
         ) : (
-          <div className="p-6 text-center text-xs text-muted-foreground">No open positions</div>
+          <div className="p-4 text-center text-sm text-muted-foreground">No open trades</div>
         )}
       </TabsContent>
 
@@ -318,177 +334,93 @@ function PositionsPanel() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border">
-                  {["Symbol", "Type", "Lots", "Open", "Close", "P&L", "Date"].map((h) => (
+                  {["Symbol", "Type", "Lots", "Open", "Close", "P&L"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-muted-foreground font-medium">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {history.slice(0, 20).map((trade) => {
-                  const pnl = parseFloat((trade as any).pnl ?? (trade as any).realizedPnl ?? "0");
-                  return (
-                    <tr key={trade.id} className="border-b border-border hover:bg-secondary/30 transition-colors">
-                      <td className="px-3 py-2 font-semibold">{trade.symbol}</td>
-                      <td className={`px-3 py-2 font-bold ${trade.type === "buy" ? "text-bull" : "text-bear"}`}>
-                        {trade.type.toUpperCase()}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">{trade.lotSize}</td>
-                      <td className="px-3 py-2 tabular-nums">{parseFloat(trade.openPrice).toFixed(5)}</td>
-                      <td className="px-3 py-2 tabular-nums">{trade.closePrice ? parseFloat(trade.closePrice).toFixed(5) : "—"}</td>
-                      <td className={`px-3 py-2 tabular-nums font-medium ${pnl >= 0 ? "text-bull" : "text-bear"}`}>
-                        {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {new Date(trade.openedAt).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {history.map((trade) => (
+                  <tr key={trade.id} className="border-b border-border hover:bg-secondary/30 transition-colors">
+                    <td className="px-3 py-2 font-semibold">{trade.symbol}</td>
+                    <td className={`px-3 py-2 font-bold ${trade.type === "buy" ? "text-bull" : "text-bear"}`}>
+                      {trade.type.toUpperCase()}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums">{trade.lotSize}</td>
+                    <td className="px-3 py-2 tabular-nums">{parseFloat(trade.openPrice).toFixed(5)}</td>
+                    <td className="px-3 py-2 tabular-nums">{parseFloat(trade.closePrice || "0").toFixed(5)}</td>
+                    <td className={`px-3 py-2 tabular-nums font-medium ${trade.pnl >= 0 ? "text-bull" : "text-bear"}`}>
+                      {trade.pnl >= 0 ? "+" : ""}${trade.pnl.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <div className="p-6 text-center text-xs text-muted-foreground">No trade history</div>
+          <div className="p-4 text-center text-sm text-muted-foreground">No trade history</div>
         )}
       </TabsContent>
     </Tabs>
   );
 }
 
-// ─── Instrument Selector ──────────────────────────────────────────────────────
-function InstrumentSelector({ selected, onSelect }: { selected: string; onSelect: (s: string) => void }) {
-  const { data: instruments } = trpc.market.instruments.useQuery();
-  const [category, setCategory] = useState("forex");
-
-  const categories = [
-    { id: "forex", label: "Forex" },
-    { id: "crypto", label: "Crypto" },
-    { id: "commodity", label: "Commodities" },
-    { id: "stock", label: "Stocks" },
-    { id: "index", label: "Indices" },
-    { id: "synthetic", label: "Synthetic" },
-  ];
-
-  const filtered = instruments?.filter((i) => i.category === category) ?? [];
+// ─── Main Component ───────────────────────────────────────────────────────────
+export function TradingTerminal() {
+  const [selectedSymbol, setSelectedSymbol] = useState("EURUSD");
+  const [selectedTimeframe, setSelectedTimeframe] = useState("1m");
+  const { data: price } = trpc.market.prices.useQuery({ symbols: [selectedSymbol] }, { refetchInterval: 1000 });
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Category tabs */}
-      <div className="flex border-b border-border overflow-x-auto">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setCategory(cat.id)}
-            className={`px-3 py-2 text-xs whitespace-nowrap transition-colors ${
-              category === cat.id
-                ? "border-b-2 border-foreground text-foreground font-medium"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
-      {/* Instruments */}
-      <div className="flex-1 overflow-y-auto">
-        {filtered.map((inst) => (
-          <button
-            key={inst.symbol}
-            onClick={() => onSelect(inst.symbol)}
-            className={`w-full flex items-center justify-between px-3 py-2.5 text-xs border-b border-border transition-colors ${
-              selected === inst.symbol ? "bg-secondary" : "hover:bg-secondary/50"
-            }`}
-          >
-            <div className="text-left">
-              <div className="font-semibold">{inst.symbol}</div>
-              <div className="text-muted-foreground text-[10px]">{inst.name}</div>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Terminal ────────────────────────────────────────────────────────────
-export default function TradingTerminal({ defaultSymbol = "EURUSD" }: { defaultSymbol?: string }) {
-  const [symbol, setSymbol] = useState(defaultSymbol);
-  const [timeframe, setTimeframe] = useState("1h");
-  const [showInstruments, setShowInstruments] = useState(false);
-
-  const { data: prices } = trpc.market.prices.useQuery({ symbols: [symbol] }, { refetchInterval: 1000 });
-  const currentPrice = prices?.[0]?.price ?? 0;
-
-  const timeframes = ["1m", "5m", "15m", "1h", "4h", "1d"];
-
-  return (
-    <div className="flex flex-col h-[calc(100vh-7rem)] bg-background">
-      {/* ─── Terminal Header ─────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card shrink-0">
-        <button
-          onClick={() => setShowInstruments(!showInstruments)}
-          className="flex items-center gap-2 hover:bg-secondary px-2 py-1 rounded transition-colors"
-        >
-          <span className="font-serif font-bold text-lg">{symbol}</span>
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        </button>
-
-        {currentPrice > 0 && (
-          <span className="font-serif text-xl font-bold tabular-nums">
-            {currentPrice > 1000
-              ? currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2 })
-              : currentPrice.toFixed(5)}
-          </span>
-        )}
-
-        <div className="flex-1" />
-
-        {/* Timeframe selector */}
-        <div className="flex items-center gap-0.5 border border-border rounded">
-          {timeframes.map((tf) => (
-            <button
-              key={tf}
-              onClick={() => setTimeframe(tf)}
-              className={`px-2.5 py-1 text-xs transition-colors ${
-                timeframe === tf ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tf}
-            </button>
-          ))}
+    <div className="flex flex-col h-full bg-background border border-border">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 p-3 border-b border-border">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="h-4 w-4 text-muted-foreground" />
+          <span className="font-semibold text-sm">Trading Terminal</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
+            <SelectTrigger className="w-32 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["EURUSD", "BTCUSD", "ETHUSD", "XAUUSD", "GBPUSD", "AUDUSD", "USDJPY", "XAGUSD"].map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedTimeframe} onValueChange={setSelectedTimeframe}>
+            <SelectTrigger className="w-20 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["1m", "5m", "15m", "1h", "4h", "1d"].map((tf) => (
+                <SelectItem key={tf} value={tf}>{tf}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {/* ─── Main Area ───────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Instrument sidebar */}
-        {showInstruments && (
-          <div className="w-48 border-r border-border bg-card shrink-0 overflow-hidden">
-            <InstrumentSelector selected={symbol} onSelect={(s) => { setSymbol(s); setShowInstruments(false); }} />
-          </div>
-        )}
-
+      {/* Content */}
+      <div className="flex flex-1 gap-3 p-3 min-h-0">
         {/* Chart */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 chart-container">
-            <PriceChart symbol={symbol} timeframe={timeframe} />
+        <div className="flex-1 border border-border rounded">
+          <PriceChart symbol={selectedSymbol} timeframe={selectedTimeframe} />
+        </div>
+
+        {/* Right Panel */}
+        <div className="w-64 flex flex-col gap-3">
+          {/* Order Panel */}
+          <div className="border border-border rounded flex-1 overflow-y-auto">
+            <OrderPanel symbol={selectedSymbol} price={price?.[0]?.price ?? 0} />
           </div>
 
-          {/* Positions panel */}
-          <div className="h-48 border-t border-[oklch(0.25_0.02_30)] bg-[oklch(0.14_0.02_30)] text-[oklch(0.90_0.010_80)] overflow-hidden">
+          {/* Positions */}
+          <div className="border border-border rounded flex-1 overflow-y-auto">
             <PositionsPanel />
           </div>
-        </div>
-
-        {/* Order panel */}
-        <div className="w-64 border-l border-border bg-card shrink-0 overflow-y-auto">
-          <div className="px-4 py-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <BarChart2 className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">New Order</span>
-            </div>
-          </div>
-          <OrderPanel symbol={symbol} price={currentPrice} />
         </div>
       </div>
     </div>
