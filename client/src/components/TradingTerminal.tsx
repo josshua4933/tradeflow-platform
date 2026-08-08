@@ -224,11 +224,11 @@ function OrderPanel({ symbol, price }: { symbol: string; price: number }) {
         <div className="border border-border p-3 space-y-1 text-xs">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Margin:</span>
-            <span className="font-semibold">${riskCalc.margin.toFixed(2)}</span>
+            <span className="font-semibold">${typeof riskCalc.margin === 'string' ? parseFloat(riskCalc.margin).toFixed(2) : riskCalc.margin}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Max Loss:</span>
-            <span className="font-semibold text-bear">${riskCalc.maxLoss.toFixed(2)}</span>
+            <span className="text-muted-foreground">Risk:</span>
+            <span className="font-semibold text-bear">${typeof riskCalc.riskAmount === 'string' ? parseFloat(riskCalc.riskAmount).toFixed(2) : riskCalc.riskAmount}</span>
           </div>
         </div>
       )}
@@ -349,9 +349,7 @@ function PositionsPanel() {
                     <td className="px-3 py-2 tabular-nums">{trade.lotSize}</td>
                     <td className="px-3 py-2 tabular-nums">{parseFloat(trade.openPrice).toFixed(5)}</td>
                     <td className="px-3 py-2 tabular-nums">{parseFloat(trade.closePrice || "0").toFixed(5)}</td>
-                    <td className={`px-3 py-2 tabular-nums font-medium ${trade.pnl >= 0 ? "text-bull" : "text-bear"}`}>
-                      {trade.pnl >= 0 ? "+" : ""}${trade.pnl.toFixed(2)}
-                    </td>
+                    <td className="px-3 py-2 tabular-nums font-medium text-muted-foreground">—</td>
                   </tr>
                 ))}
               </tbody>
