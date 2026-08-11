@@ -99,3 +99,11 @@
 - [x] Admin approval workflow for withdrawals
 - [x] End-to-end deposit flow: checkout -> webhook -> wallet credit
 - [x] End-to-end withdrawal flow: request -> admin approval -> payout -> webhook
+
+## Phase 11: Live Market Verification
+- [x] Trace Binance klines startup and Trading Terminal subscription wiring; verify live candle data reaches the frontend
+- [x] Fix missing Binance klines initialization or invalid stream subscriptions if confirmed
+- [x] Run TypeScript/tests and verify runtime Binance and frontend candle events before checkpoint
+- [x] Save a checkpoint only after live-data verification passes
+
+> Note: Do not mark these items complete until the server and frontend delivery are verified.

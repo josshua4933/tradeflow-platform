@@ -14,15 +14,22 @@ export interface MarketPrice {
 }
 
 // Map trading symbols to Binance symbols
-const SYMBOL_MAP: Record<string, string> = {
-  "EURUSD": "EURUSDT",
+export const SYMBOL_MAP: Record<string, string> = {
   "BTCUSD": "BTCUSDT",
   "ETHUSD": "ETHUSDT",
-  "XAUUSD": "XAUUSDT",
-  "GBPUSD": "GBPUSDT",
-  "USDJPY": "JPYUSDT",
-  "XAGUSD": "XAGUUSDT",
-  "US500": "SPYUSDT",
+  "BNBUSD": "BNBUSDT",
+  "XRPUSD": "XRPUSDT",
+  "ADAUSD": "ADAUSDT",
+  "SOLUSD": "SOLUSDT",
+  "DOGEUSD": "DOGEUSDT",
+  "AVAXUSD": "AVAXUSDT",
+  "LINKUSD": "LINKUSDT",
+  "DOTUSD": "DOTUSDT",
+  "LTCUSD": "LTCUSDT",
+  "BCHUSD": "BCHUSDT",
+  "TRXUSD": "TRXUSDT",
+  "UNIUSD": "UNIUSDT",
+  "AAVEUSD": "AAVEUSDT",
 };
 
 /**
@@ -30,7 +37,9 @@ const SYMBOL_MAP: Record<string, string> = {
  */
 export async function getBinancePrice(symbol: string): Promise<MarketPrice | null> {
   try {
-    const binanceSymbol = SYMBOL_MAP[symbol] || symbol;
+    const normalized = symbol.toUpperCase();
+    const binanceSymbol = SYMBOL_MAP[normalized] ?? (/^[A-Z0-9]+USDT$/.test(normalized) ? normalized : null);
+    if (!binanceSymbol) return null;
     
     const response = await axios.get(`${BINANCE_API_BASE}/ticker/24hr`, {
       params: { symbol: binanceSymbol },

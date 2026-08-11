@@ -2,6 +2,7 @@ import { z } from "zod";
 import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { getInstruments, getInstrumentBySymbol, getTradingSignals, getEconomicEvents } from "../db";
 import { getCachedPrices } from "../binance";
+import { getBinanceKlines } from "../binanceKlines";
 
 // ─── Price Simulation Engine ──────────────────────────────────────────────────
 // Base prices for all instruments
@@ -120,8 +121,9 @@ export const marketRouter = router({
         count: z.number().min(10).max(500).default(100),
       })
     )
-    .query(({ input }) => {
-      return generateCandles(input.symbol, input.timeframe, input.count);
+    .query(async ({ input }) => {
+      const liveCandles = await getBinanceKlines(input.symbol, input.timeframe, input.count);
+      return liveCandles ?? generateCandles(input.symbol, input.timeframe, input.count);
     }),
 
   signals: publicProcedure.query(async () => {

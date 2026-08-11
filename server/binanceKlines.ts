@@ -1,7 +1,8 @@
+import axios from "axios";
 import WebSocket from "ws";
 import { getWebSocket } from "./websocket";
 
-interface Candle {
+export interface Candle {
   symbol: string;
   interval: string;
   openTime: number;
@@ -18,21 +19,92 @@ interface Candle {
   isClosed: boolean;
 }
 
-// Major trading pairs to auto-subscribe to
-const DEFAULT_PAIRS = [
-  "EURUSD", "BTCUSD", "ETHUSD", "XAUUSD", "GBPUSD",
-  "AUDUSD", "USDJPY", "XAGUSD", "BNBUSD", "ADAUSD"
-];
+export interface ChartCandle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+const BINANCE_REST_URL = "https://api.binance.com/api/v3";
+const DEFAULT_INTERVAL = "1m";
+
+// Platform symbols are USD-quoted, while Binance spot uses USDT-quoted pairs.
+const CRYPTO_SYMBOL_MAP: Record<string, string> = {
+  BTCUSD: "BTCUSDT",
+  ETHUSD: "ETHUSDT",
+  BNBUSD: "BNBUSDT",
+  XRPUSD: "XRPUSDT",
+  ADAUSD: "ADAUSDT",
+  SOLUSD: "SOLUSDT",
+  DOGEUSD: "DOGEUSDT",
+  AVAXUSD: "AVAXUSDT",
+  LINKUSD: "LINKUSDT",
+  DOTUSD: "DOTUSDT",
+  LTCUSD: "LTCUSDT",
+  BCHUSD: "BCHUSDT",
+  TRXUSD: "TRXUSDT",
+  UNIUSD: "UNIUSDT",
+  AAVEUSD: "AAVEUSDT",
+};
+
+const BINANCE_TO_PLATFORM = Object.fromEntries(
+  Object.entries(CRYPTO_SYMBOL_MAP).map(([platform, binance]) => [binance, platform])
+);
+
+const DEFAULT_CRYPTO_SYMBOLS = Object.keys(CRYPTO_SYMBOL_MAP);
 
 let klinesWs: WebSocket | null = null;
 let isConnected = false;
 let subscriptions = new Set<string>();
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const loggedCandleSymbols = new Set<string>();
 
-/**
- * Initialize Binance klines WebSocket connection
- */
+function toBinanceSymbol(symbol: string): string | null {
+  const normalized = symbol.toUpperCase();
+  if (CRYPTO_SYMBOL_MAP[normalized]) return CRYPTO_SYMBOL_MAP[normalized];
+  if (/^[A-Z0-9]+USDT$/.test(normalized)) return normalized;
+  return null;
+}
+
+function toPlatformSymbol(symbol: string): string {
+  const normalized = symbol.toUpperCase();
+  return BINANCE_TO_PLATFORM[normalized] ?? (normalized.endsWith("USDT") ? `${normalized.slice(0, -4)}USD` : normalized);
+}
+
+/** Fetch real historical candles from Binance for supported crypto pairs. */
+export async function getBinanceKlines(
+  symbol: string,
+  interval: string,
+  limit = 100,
+): Promise<ChartCandle[] | null> {
+  const binanceSymbol = toBinanceSymbol(symbol);
+  if (!binanceSymbol) return null;
+
+  try {
+    const response = await axios.get(`${BINANCE_REST_URL}/klines`, {
+      params: { symbol: binanceSymbol, interval, limit: Math.min(Math.max(limit, 10), 1000) },
+      timeout: 7000,
+    });
+
+    return response.data.map((row: [number, string, string, string, string, string]) => ({
+      time: Math.floor(row[0] / 1000),
+      open: Number(row[1]),
+      high: Number(row[2]),
+      low: Number(row[3]),
+      close: Number(row[4]),
+      volume: Number(row[5]),
+    }));
+  } catch (error) {
+    console.error(`[BinanceKlines] Historical request failed for ${symbol}:`, error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/** Initialize the Binance WebSocket connection for live crypto klines. */
 export function initializeBinanceKlines() {
   if (klinesWs && isConnected) {
     console.log("[BinanceKlines] Already connected");
@@ -40,188 +112,156 @@ export function initializeBinanceKlines() {
   }
 
   console.log("[BinanceKlines] Connecting to Binance klines stream...");
+  klinesWs = new WebSocket("wss://stream.binance.com:9443/ws");
 
-  try {
-    klinesWs = new WebSocket("wss://stream.binance.com:9443/ws");
+  klinesWs.on("open", () => {
+    console.log("[BinanceKlines] Connected to Binance WebSocket");
+    isConnected = true;
+    reconnectAttempts = 0;
+    subscriptions.clear();
+    subscribeToAllCryptoKlines(DEFAULT_INTERVAL);
+  });
 
-    klinesWs.on("open", () => {
-      console.log("[BinanceKlines] Connected to Binance WebSocket");
-      isConnected = true;
-      reconnectAttempts = 0;
-      
-      // Auto-subscribe to default pairs on 1m timeframe
-      console.log("[BinanceKlines] Auto-subscribing to default pairs...");
-      DEFAULT_PAIRS.forEach(pair => {
-        subscribeToKlines(pair, "1m");
-      });
-    });
+  klinesWs.on("message", (data) => {
+    try {
+      handleKlinesMessage(JSON.parse(data.toString()));
+    } catch (error) {
+      console.error("[BinanceKlines] Error parsing message:", error);
+    }
+  });
 
-    klinesWs.on("message", (data: string) => {
-      try {
-        const message = JSON.parse(data);
-        handleKlinesMessage(message);
-      } catch (error) {
-        console.error("[BinanceKlines] Error parsing message:", error);
-      }
-    });
-
-    klinesWs.on("error", (error: Error) => {
-      console.error("[BinanceKlines] WebSocket error:", error.message);
-      isConnected = false;
-    });
-
-    klinesWs.on("close", () => {
-      console.log("[BinanceKlines] Disconnected from Binance");
-      isConnected = false;
-      klinesWs = null;
-
-      // Attempt reconnection with exponential backoff
-      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-        reconnectAttempts++;
-        console.log(`[BinanceKlines] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
-        setTimeout(() => {
-          initializeBinanceKlines();
-        }, delay);
-      } else {
-        console.error("[BinanceKlines] Max reconnection attempts reached");
-      }
-    });
-  } catch (error) {
-    console.error("[BinanceKlines] Failed to initialize:", error);
+  klinesWs.on("error", (error) => {
+    console.error("[BinanceKlines] WebSocket error:", error.message);
     isConnected = false;
-  }
-}
+  });
 
-/**
- * Subscribe to klines for a specific symbol and interval
- * Intervals: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
- */
-export function subscribeToKlines(symbol: string, interval: string = "1m") {
-  if (!klinesWs || klinesWs.readyState !== WebSocket.OPEN) {
-    console.warn(`[BinanceKlines] WebSocket not ready for ${symbol}:${interval}`);
-    return;
-  }
+  klinesWs.on("close", (code, reason) => {
+    console.log(`[BinanceKlines] Disconnected from Binance (code ${code}, reason ${reason.toString()})`);
+    isConnected = false;
+    klinesWs = null;
+    subscriptions.clear();
 
-  const streamName = `${symbol.toLowerCase()}@kline_${interval}`;
-  const subscriptionKey = `${symbol}:${interval}`;
-
-  if (subscriptions.has(subscriptionKey)) {
-    console.log(`[BinanceKlines] Already subscribed to ${subscriptionKey}`);
-    return;
-  }
-
-  const subscription = {
-    method: "SUBSCRIBE",
-    params: [streamName],
-    id: Date.now(),
-  };
-
-  try {
-    klinesWs.send(JSON.stringify(subscription));
-    subscriptions.add(subscriptionKey);
-    console.log(`[BinanceKlines] Subscribed to ${symbol} ${interval} candles`);
-  } catch (error) {
-    console.error(`[BinanceKlines] Failed to subscribe to ${subscriptionKey}:`, error);
-  }
-}
-
-/**
- * Unsubscribe from klines
- */
-export function unsubscribeFromKlines(symbol: string, interval: string = "1m") {
-  if (!klinesWs || klinesWs.readyState !== WebSocket.OPEN) {
-    return;
-  }
-
-  const streamName = `${symbol.toLowerCase()}@kline_${interval}`;
-  const subscriptionKey = `${symbol}:${interval}`;
-
-  const subscription = {
-    method: "UNSUBSCRIBE",
-    params: [streamName],
-    id: Date.now(),
-  };
-
-  try {
-    klinesWs.send(JSON.stringify(subscription));
-    subscriptions.delete(subscriptionKey);
-    console.log(`[BinanceKlines] Unsubscribed from ${symbol} ${interval}`);
-  } catch (error) {
-    console.error(`[BinanceKlines] Failed to unsubscribe from ${subscriptionKey}:`, error);
-  }
-}
-
-/**
- * Handle incoming klines messages from Binance
- */
-function handleKlinesMessage(message: any) {
-  // Handle subscription response
-  if (message.result === null && message.id) {
-    return;
-  }
-
-  // Handle kline data
-  if (message.e === "kline") {
-    const k = message.k;
-    const candle: Candle = {
-      symbol: message.s,
-      interval: k.i,
-      openTime: k.t,
-      closeTime: k.T,
-      open: parseFloat(k.o),
-      high: parseFloat(k.h),
-      low: parseFloat(k.l),
-      close: parseFloat(k.c),
-      volume: parseFloat(k.v),
-      quoteAssetVolume: parseFloat(k.q),
-      numberOfTrades: k.n,
-      takerBuyBaseAssetVolume: parseFloat(k.V),
-      takerBuyQuoteAssetVolume: parseFloat(k.Q),
-      isClosed: k.x,
-    };
-
-    // Broadcast to all connected clients
-    broadcastCandle(candle);
-  }
-}
-
-/**
- * Broadcast candle update to all connected clients
- */
-function broadcastCandle(candle: Candle) {
-  const io = getWebSocket();
-  if (!io) return;
-
-  io.emit("candle_update", {
-    ...candle,
-    timestamp: Date.now(),
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+      reconnectAttempts += 1;
+      console.log(`[BinanceKlines] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+      setTimeout(initializeBinanceKlines, delay);
+    }
   });
 }
 
-/**
- * Get connection status
- */
+/** Subscribe to all supported crypto pairs in one Binance subscription request. */
+export function subscribeToAllCryptoKlines(interval = DEFAULT_INTERVAL) {
+  if (!klinesWs || klinesWs.readyState !== WebSocket.OPEN) {
+    console.warn("[BinanceKlines] WebSocket not ready for bulk subscription");
+    return;
+  }
+
+  const streams = DEFAULT_CRYPTO_SYMBOLS.map((symbol) => {
+    const binanceSymbol = CRYPTO_SYMBOL_MAP[symbol];
+    subscriptions.add(`${binanceSymbol}:${interval}`);
+    return `${binanceSymbol.toLowerCase()}@kline_${interval}`;
+  });
+
+  // Binance limits incoming client messages to 5 per second; send one bulk request.
+  klinesWs.send(JSON.stringify({
+    method: "SUBSCRIBE",
+    params: streams,
+    id: Date.now(),
+  }));
+  console.log(`[BinanceKlines] Subscribed to ${streams.length} crypto pairs in one request`);
+}
+
+/** Subscribe to a platform symbol or a raw Binance USDT symbol. */
+export function subscribeToKlines(symbol: string, interval = DEFAULT_INTERVAL): boolean {
+  if (!klinesWs || klinesWs.readyState !== WebSocket.OPEN) {
+    console.warn(`[BinanceKlines] WebSocket not ready for ${symbol}:${interval}`);
+    return false;
+  }
+
+  const binanceSymbol = toBinanceSymbol(symbol);
+  if (!binanceSymbol) {
+    console.warn(`[BinanceKlines] Unsupported non-crypto symbol: ${symbol}`);
+    return false;
+  }
+
+  const subscriptionKey = `${binanceSymbol}:${interval}`;
+  if (subscriptions.has(subscriptionKey)) return true;
+
+  klinesWs.send(JSON.stringify({
+    method: "SUBSCRIBE",
+    params: [`${binanceSymbol.toLowerCase()}@kline_${interval}`],
+    id: Date.now(),
+  }));
+  subscriptions.add(subscriptionKey);
+  console.log(`[BinanceKlines] Subscribed to ${binanceSymbol} ${interval} candles`);
+  return true;
+}
+
+export function unsubscribeFromKlines(symbol: string, interval = DEFAULT_INTERVAL) {
+  if (!klinesWs || klinesWs.readyState !== WebSocket.OPEN) return;
+  const binanceSymbol = toBinanceSymbol(symbol);
+  if (!binanceSymbol) return;
+
+  klinesWs.send(JSON.stringify({
+    method: "UNSUBSCRIBE",
+    params: [`${binanceSymbol.toLowerCase()}@kline_${interval}`],
+    id: Date.now(),
+  }));
+  subscriptions.delete(`${binanceSymbol}:${interval}`);
+}
+
+function handleKlinesMessage(message: any) {
+  if (message.code) {
+    console.error(`[BinanceKlines] Binance stream error ${message.code}: ${message.msg}`);
+    return;
+  }
+  if (message.result === null && message.id) return;
+  if (message.e !== "kline" || !message.k) return;
+
+  const k = message.k;
+  const candle: Candle = {
+    symbol: toPlatformSymbol(message.s),
+    interval: k.i,
+    openTime: k.t,
+    closeTime: k.T,
+    open: Number(k.o),
+    high: Number(k.h),
+    low: Number(k.l),
+    close: Number(k.c),
+    volume: Number(k.v),
+    quoteAssetVolume: Number(k.q),
+    numberOfTrades: k.n,
+    takerBuyBaseAssetVolume: Number(k.V),
+    takerBuyQuoteAssetVolume: Number(k.Q),
+    isClosed: Boolean(k.x),
+  };
+
+  if (!loggedCandleSymbols.has(candle.symbol)) {
+    loggedCandleSymbols.add(candle.symbol);
+    console.log(`[BinanceKlines] Candle received and broadcast: ${candle.symbol} ${candle.interval} close=${candle.close}`);
+  }
+
+  const io = getWebSocket();
+  io?.emit("candle_update", { ...candle, timestamp: Date.now() });
+}
+
 export function isKlinesConnected(): boolean {
   return isConnected && klinesWs?.readyState === WebSocket.OPEN;
 }
 
-/**
- * Get all active subscriptions
- */
 export function getActiveSubscriptions(): string[] {
   return Array.from(subscriptions);
 }
 
-/**
- * Disconnect from Binance klines
- */
 export function disconnectBinanceKlines() {
-  if (klinesWs) {
-    klinesWs.close();
-    klinesWs = null;
-    isConnected = false;
-    subscriptions.clear();
-    console.log("[BinanceKlines] Disconnected");
-  }
+  if (klinesWs) klinesWs.close();
+  klinesWs = null;
+  isConnected = false;
+  subscriptions.clear();
 }
+
+export { CRYPTO_SYMBOL_MAP };
+
+// Keep the platform crypto symbols available to startup diagnostics.
+console.log(`[BinanceKlines] Supported crypto pairs: ${DEFAULT_CRYPTO_SYMBOLS.join(", ")}`);

@@ -46,6 +46,36 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
       }
     });
 
+    // Subscribe to Binance candlestick updates for the Trading Terminal.
+    socket.on("subscribe_klines", async (data: { symbol: string; interval?: string }) => {
+      const session = activeSessions.get(socket.id);
+      if (!session) {
+        socket.emit("error", { message: "Not authenticated" });
+        return;
+      }
+
+      try {
+        const { subscribeToKlines } = await import("./binanceKlines");
+        const subscribed = subscribeToKlines(data.symbol, data.interval ?? "1m");
+        if (!subscribed) {
+          socket.emit("market_data_error", {
+            type: "klines",
+            symbol: data.symbol,
+            interval: data.interval ?? "1m",
+            message: "This symbol is not available on Binance spot markets.",
+          });
+        }
+      } catch (error) {
+        console.error("[WebSocket] Failed to subscribe to klines:", error);
+        socket.emit("market_data_error", {
+          type: "klines",
+          symbol: data.symbol,
+          interval: data.interval ?? "1m",
+          message: "Unable to subscribe to candle data.",
+        });
+      }
+    });
+
     // Unsubscribe from price updates
     socket.on("unsubscribe_prices", (data: { symbols: string[] }) => {
       const session = activeSessions.get(socket.id);
@@ -82,9 +112,13 @@ export function getWebSocket(): SocketIOServer | null {
 export async function broadcastPriceUpdate(symbol: string, price: any) {
   if (!io) return;
 
+  const normalizedPrice = typeof price === "number" ? price : Number(price?.price ?? price?.lastPrice);
+  if (!Number.isFinite(normalizedPrice)) return;
+
   io.emit("price_update", {
     symbol,
-    price,
+    price: normalizedPrice,
+    changePercent24h: Number(price?.changePercent24h ?? price?.priceChangePercent ?? 0),
     timestamp: Date.now(),
   });
 }

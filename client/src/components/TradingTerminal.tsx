@@ -16,8 +16,7 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
   const chartInstance = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
   const { candles: wsCandles, subscribeToCandles, getCandle } = useWebSocketContext();
-  const { data: candles } = trpc.market.candles.useQuery({ symbol, timeframe: timeframe as any }, { refetchInterval: 10000 });
-  const { data: prices } = trpc.market.prices.useQuery({ symbols: [symbol] }, { refetchInterval: 2000 });
+  const { data: candles } = trpc.market.candles.useQuery({ symbol, timeframe: timeframe as any }, { refetchInterval: 60000 });
 
   // Subscribe to WebSocket candle updates
   useEffect(() => {
@@ -102,22 +101,6 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
       close: wsCandle.close,
     });
   }, [wsCandles, symbol, timeframe, getCandle]);
-
-  // Update last candle with live price
-  useEffect(() => {
-    if (!candleSeriesRef.current || !prices?.[0]) return;
-    const livePrice = prices[0].price;
-    const wsCandle = getCandle(symbol, timeframe);
-    if (!wsCandle) return;
-
-    candleSeriesRef.current.update({
-      time: Math.floor(wsCandle.openTime / 1000) as any,
-      open: wsCandle.open,
-      high: Math.max(wsCandle.high, livePrice),
-      low: Math.min(wsCandle.low, livePrice),
-      close: livePrice,
-    });
-  }, [prices, symbol, timeframe, getCandle]);
 
   return <div ref={chartRef} className="w-full h-full" />;
 }
@@ -365,9 +348,11 @@ function PositionsPanel() {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function TradingTerminal() {
-  const [selectedSymbol, setSelectedSymbol] = useState("EURUSD");
+  const [selectedSymbol, setSelectedSymbol] = useState("BTCUSD");
   const [selectedTimeframe, setSelectedTimeframe] = useState("1m");
-  const { data: price } = trpc.market.prices.useQuery({ symbols: [selectedSymbol] }, { refetchInterval: 1000 });
+  const { isConnected, getPrice } = useWebSocketContext();
+  const { data: price } = trpc.market.binancePrices.useQuery({ symbols: [selectedSymbol] }, { refetchInterval: 5000 });
+  const livePrice = getPrice(selectedSymbol)?.price ?? price?.[0]?.price ?? 0;
 
   return (
     <div className="flex flex-col h-full bg-background border border-border">
@@ -378,12 +363,15 @@ export function TradingTerminal() {
           <span className="font-semibold text-sm">Trading Terminal</span>
         </div>
         <div className="flex items-center gap-2">
+          <div className={`text-[10px] font-medium tracking-wide ${isConnected ? "text-bull" : "text-muted-foreground"}`}>
+            {isConnected ? "BINANCE LIVE" : "CONNECTING"}
+          </div>
           <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
             <SelectTrigger className="w-32 h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {["EURUSD", "BTCUSD", "ETHUSD", "XAUUSD", "GBPUSD", "AUDUSD", "USDJPY", "XAGUSD"].map((s) => (
+              {["BTCUSD", "ETHUSD", "BNBUSD", "XRPUSD", "ADAUSD", "SOLUSD", "DOGEUSD", "AVAXUSD"].map((s) => (
                 <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
             </SelectContent>
@@ -412,7 +400,7 @@ export function TradingTerminal() {
         <div className="w-64 flex flex-col gap-3">
           {/* Order Panel */}
           <div className="border border-border rounded flex-1 overflow-y-auto">
-            <OrderPanel symbol={selectedSymbol} price={price?.[0]?.price ?? 0} />
+            <OrderPanel symbol={selectedSymbol} price={livePrice} />
           </div>
 
           {/* Positions */}

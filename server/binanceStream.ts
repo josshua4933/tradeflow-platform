@@ -16,48 +16,9 @@ const RECONNECT_DELAY = 3000;
 
 // Major crypto pairs to subscribe to
 const CRYPTO_PAIRS = [
-  // Top 10 by market cap
-  "BTCUSDT",
-  "ETHUSDT",
-  "BNBUSDT",
-  "XRPUSDT",
-  "ADAUSDT",
-  "SOLusdt",
-  "DOGEUSDT",
-  "POLKADOT",
-  "DOTUSDT",
-  "MATICUSDT",
-  // Other major pairs
-  "LTCUSDT",
-  "LINKUSDT",
-  "UNIUSDT",
-  "AVAXUSDT",
-  "ATOMUSDT",
-  "XLMUSDT",
-  "VETUSDT",
-  "FILUSDT",
-  "THETAUSDT",
-  "MANAUSDT",
-  "SANDUSDT",
-  "AXSUSDT",
-  "CHZUSDT",
-  "HBARUSDT",
-  "GRTUSDT",
-  "MKRUSDT",
-  "AAVUSDT",
-  "SNXUSDT",
-  "CRVUSDT",
-  "YFIUSDT",
-  // Forex pairs (if available on Binance)
-  "EURUSDT",
-  "GBPUSDT",
-  "JPYUSDT",
-  "AUDUSD",
-  "CADUSD",
-  "CHFUSD",
-  "CNHUSD",
-  "INRUSD",
-  "ZARUSD",
+  "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
+  "SOLUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT",
+  "LTCUSDT", "BCHUSDT", "TRXUSDT", "UNIUSDT", "AAVEUSDT",
 ];
 
 /**
@@ -83,9 +44,9 @@ export function initializeBinanceStream() {
       subscribeToCryptoPairs();
     });
 
-    binanceWs.on("message", (data: string) => {
+    binanceWs.on("message", (data) => {
       try {
-        const message = JSON.parse(data);
+        const message = JSON.parse(data.toString());
         handleBinanceMessage(message);
       } catch (error) {
         console.error("[BinanceStream] Error parsing message:", error);
@@ -97,8 +58,8 @@ export function initializeBinanceStream() {
       isConnected = false;
     });
 
-    binanceWs.on("close", () => {
-      console.log("[BinanceStream] Disconnected from Binance");
+    binanceWs.on("close", (code, reason) => {
+      console.log(`[BinanceStream] Disconnected from Binance (code ${code}, reason ${reason.toString()})`);
       isConnected = false;
       binanceWs = null;
 

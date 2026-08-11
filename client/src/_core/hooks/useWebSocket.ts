@@ -66,6 +66,7 @@ export function useWebSocket() {
   const [tradeExecutions, setTradeExecutions] = useState<TradeExecution[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [candles, setCandles] = useState<Map<string, Candle>>(new Map());
+  const pendingCandleSubscriptions = useRef(new Set<string>());
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -92,6 +93,12 @@ export function useWebSocket() {
       socket.emit("subscribe_prices", {
         symbols: ["EURUSD", "BTCUSD", "XAUUSD", "GBPUSD", "US500", "ETHUSD"],
       });
+
+      // Flush candle subscriptions requested before Socket.IO finished connecting.
+      pendingCandleSubscriptions.current.forEach((key) => {
+        const [symbol, interval] = key.split(":");
+        socket.emit("subscribe_klines", { symbol, interval });
+      });
     });
 
     socket.on("disconnect", () => {
@@ -101,11 +108,13 @@ export function useWebSocket() {
 
     // Price updates
     socket.on("prices_update", (data: { prices: PriceUpdate[] }) => {
-      const newPrices = new Map(prices);
-      data.prices.forEach((price) => {
-        newPrices.set(price.symbol, price);
+      setPrices((previous) => {
+        const newPrices = new Map(previous);
+        data.prices.forEach((price) => {
+          newPrices.set(price.symbol, price);
+        });
+        return newPrices;
       });
-      setPrices(newPrices);
     });
 
     socket.on("price_update", (data: PriceUpdate) => {
@@ -171,8 +180,14 @@ export function useWebSocket() {
 
   // Subscribe to candles
   const subscribeToCandles = useCallback((symbol: string, interval: string = "1m") => {
+    const key = `${symbol.toUpperCase()}:${interval}`;
+    pendingCandleSubscriptions.current.add(key);
+
     if (socketRef.current?.connected) {
-      socketRef.current.emit("subscribe_klines", { symbol, interval });
+      socketRef.current.emit("subscribe_klines", {
+        symbol: symbol.toUpperCase(),
+        interval,
+      });
     }
   }, []);
 
