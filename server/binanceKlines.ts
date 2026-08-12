@@ -28,7 +28,8 @@ export interface ChartCandle {
   volume: number;
 }
 
-const BINANCE_REST_URL = "https://api.binance.com/api/v3";
+// Market-data-only REST endpoint works for public klines in restricted environments.
+const BINANCE_REST_URL = "https://data-api.binance.vision/api/v3";
 const DEFAULT_INTERVAL = "1m";
 
 // Platform symbols are USD-quoted, while Binance spot uses USDT-quoted pairs.
@@ -112,7 +113,7 @@ export function initializeBinanceKlines() {
   }
 
   console.log("[BinanceKlines] Connecting to Binance klines stream...");
-  klinesWs = new WebSocket("wss://stream.binance.com:9443/ws");
+  klinesWs = new WebSocket("wss://data-stream.binance.vision/ws");
 
   klinesWs.on("open", () => {
     console.log("[BinanceKlines] Connected to Binance WebSocket");

@@ -33,7 +33,7 @@ export function initializeBinanceStream() {
   console.log("[BinanceStream] Connecting to Binance WebSocket...");
 
   try {
-    binanceWs = new WebSocket("wss://stream.binance.com:9443/ws");
+    binanceWs = new WebSocket("wss://data-stream.binance.vision/ws");
 
     binanceWs.on("open", () => {
       console.log("[BinanceStream] Connected to Binance");

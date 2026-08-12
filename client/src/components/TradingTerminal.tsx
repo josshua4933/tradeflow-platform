@@ -16,6 +16,7 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
   const chartInstance = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
   const { candles: wsCandles, subscribeToCandles, getCandle } = useWebSocketContext();
+  const liveCandle = getCandle(symbol, timeframe);
   const { data: candles } = trpc.market.candles.useQuery({ symbol, timeframe: timeframe as any }, { refetchInterval: 60000 });
 
   // Subscribe to WebSocket candle updates
@@ -26,7 +27,8 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
   useEffect(() => {
     if (!chartRef.current) return;
 
-    const chart = createChart(chartRef.current, {
+    const container = chartRef.current;
+    const chart = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: "#1a1a1a" },
         textColor: "#a0998a",
@@ -44,8 +46,8 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
         timeVisible: true,
         secondsVisible: false,
       },
-      width: chartRef.current.clientWidth,
-      height: chartRef.current.clientHeight,
+      width: Math.max(container.clientWidth, 320),
+      height: Math.max(container.clientHeight, 420),
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -61,28 +63,40 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
     candleSeriesRef.current = candleSeries;
 
     const handleResize = () => {
-      if (chartRef.current) {
-        chart.applyOptions({ width: chartRef.current.clientWidth, height: chartRef.current.clientHeight });
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      if (width > 0 && height > 0) {
+        chart.applyOptions({ width, height });
       }
     };
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(container);
     window.addEventListener("resize", handleResize);
+    requestAnimationFrame(handleResize);
 
     return () => {
+      resizeObserver.disconnect();
       window.removeEventListener("resize", handleResize);
       chart.remove();
+      chartInstance.current = null;
+      candleSeriesRef.current = null;
     };
   }, []);
 
   // Update chart with REST API candles (initial load)
   useEffect(() => {
     if (!candleSeriesRef.current || !candles || candles.length === 0) return;
-    const data = candles.map((c: any) => ({
-      time: Math.floor(c.time / 1000) as any,
-      open: typeof c.open === 'string' ? parseFloat(c.open) : c.open,
-      high: typeof c.high === 'string' ? parseFloat(c.high) : c.high,
-      low: typeof c.low === 'string' ? parseFloat(c.low) : c.low,
-      close: typeof c.close === 'string' ? parseFloat(c.close) : c.close,
-    }));
+    const data = candles
+      .map((c: any) => ({
+        time: Math.floor(Number(c.time)) as any,
+        open: Number(c.open),
+        high: Number(c.high),
+        low: Number(c.low),
+        close: Number(c.close),
+      }))
+      .filter((c: any) => c.time > 0 && [c.open, c.high, c.low, c.close].every(Number.isFinite))
+      .sort((a: any, b: any) => a.time - b.time);
+    if (data.length === 0) return;
     candleSeriesRef.current.setData(data);
     chartInstance.current?.timeScale().fitContent();
   }, [candles]);
@@ -102,7 +116,16 @@ function PriceChart({ symbol, timeframe }: { symbol: string; timeframe: string }
     });
   }, [wsCandles, symbol, timeframe, getCandle]);
 
-  return <div ref={chartRef} className="w-full h-full" />;
+  return (
+    <div className="relative w-full h-full min-h-[480px] bg-[#1a1a1a]">
+      <div ref={chartRef} className="absolute inset-0" />
+      {!candles?.length && !liveCandle && (
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-[#a0998a] pointer-events-none">
+          Loading live Binance candles…
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Order Panel ─────────────────────────────────────────────────────────────
@@ -355,7 +378,7 @@ export function TradingTerminal() {
   const livePrice = getPrice(selectedSymbol)?.price ?? price?.[0]?.price ?? 0;
 
   return (
-    <div className="flex flex-col h-full bg-background border border-border">
+    <div className="flex flex-col h-full min-h-[700px] bg-background border border-border">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 p-3 border-b border-border">
         <div className="flex items-center gap-2">
@@ -390,9 +413,9 @@ export function TradingTerminal() {
       </div>
 
       {/* Content */}
-      <div className="flex flex-1 gap-3 p-3 min-h-0">
+      <div className="flex flex-1 gap-3 p-3 min-h-0 min-h-[620px]">
         {/* Chart */}
-        <div className="flex-1 border border-border rounded">
+        <div className="flex-1 min-w-0 min-h-[480px] border border-border rounded overflow-hidden">
           <PriceChart symbol={selectedSymbol} timeframe={selectedTimeframe} />
         </div>
 

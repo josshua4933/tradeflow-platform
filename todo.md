@@ -107,3 +107,9 @@
 - [x] Save a checkpoint only after live-data verification passes
 
 > Note: Do not mark these items complete until the server and frontend delivery are verified.
+
+## Phase 12: Trading Terminal Chart Display Fix
+- [x] Trace why verified live candle data is not visibly rendered in the Trading Terminal
+- [x] Fix chart initialization, historical candle transformation, and live candle updates
+- [x] Run TypeScript/tests and verify the candle delivery path and chart data are valid; browser visual verification requires an authenticated terminal session
+- [x] Save a checkpoint after live data, chart sizing, production build, and end-to-end candle delivery verification; visual route inspection remains blocked by the expired browser login session

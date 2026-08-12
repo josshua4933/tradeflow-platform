@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { getBinanceKlines } from "./binanceKlines";
 
 // ─── Mock DB ─────────────────────────────────────────────────────────────────
 vi.mock("./db", () => ({
@@ -483,4 +484,16 @@ describe("palpluss", () => {
     // Webhook secret should be a valid base64 string or UUID
     expect(webhookSecret.length).toBeGreaterThan(10);
   });
+});
+
+
+describe("live market candles", () => {
+  it("returns renderable BTCUSD candles from Binance market data", async () => {
+    const candles = await getBinanceKlines("BTCUSD", "1m", 10);
+    expect(candles).not.toBeNull();
+    expect(candles?.length).toBeGreaterThanOrEqual(10);
+    const candle = candles?.[0];
+    expect(candle?.time).toBeGreaterThan(1_000_000_000);
+    expect([candle?.open, candle?.high, candle?.low, candle?.close, candle?.volume].every(Number.isFinite)).toBe(true);
+  }, 15_000);
 });

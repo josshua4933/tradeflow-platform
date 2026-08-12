@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const BINANCE_API_BASE = "https://api.binance.com/api/v3";
+// Market-data-only endpoint avoids Binance account/API restrictions while preserving public prices.
+const BINANCE_API_BASE = "https://data-api.binance.vision/api/v3";
 
 export interface MarketPrice {
   symbol: string;
