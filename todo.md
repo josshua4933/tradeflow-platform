@@ -113,3 +113,34 @@
 - [x] Fix chart initialization, historical candle transformation, and live candle updates
 - [x] Run TypeScript/tests and verify the candle delivery path and chart data are valid; browser visual verification requires an authenticated terminal session
 - [x] Save a checkpoint after live data, chart sizing, production build, and end-to-end candle delivery verification; visual route inspection remains blocked by the expired browser login session
+
+## Phase 13: Professional Trading Terminal Layout and Order Controls
+- [x] Redesign the Trading Terminal to use at least 80% of the viewport and align with page edges
+- [x] Expand the chart and analysis workspace for clear candlestick review
+- [x] Make Buy and Sell controls execute reliably with validation, loading, success, and error feedback
+- [x] Run TypeScript/tests, verify the responsive preview, and save a checkpoint
+
+- [x] Replace the narrow terminal wrapper with an edge-to-edge, viewport-sized trading workspace
+- [x] Verify every selectable crypto symbol has an active instrument record and live executable pricing
+- [x] Reconcile order execution and open-position pricing with the Binance price feed for supported crypto pairs
+- [x] Add explicit Buy/Sell loading, success, and error feedback and validate the flow with tests
+
+## Phase 14: TradingView-Style Terminal Transformation
+- [x] Build a TradingView-style top toolbar with asset search, ticker badge, change indicator, timeframe selector, chart type toggle, indicators menu, and fullscreen controls
+- [x] Upgrade the Lightweight Charts container with dark professional styling, crosshair sync, grid dots, volume pane, and price scale padding
+- [x] Create a right-hand professional order ticket tabbed interface (Market, Limit, Stop, Risk Calculator) with real-time bid/ask and leverage controls
+- [x] Build a bottom multi-tab trading panel (Open Positions with live P&L and quick close, Pending Orders, Trade History, Account Summary, Asset Info)
+- [x] Add real-time price flashing, notification toast integration, and robust error handling matching TradingView/Binance UX
+- [x] Add unit coverage for TradingView-style terminal formatting, quote-side calculations, and symbol filtering
+
+## Phase 15: TradingView-Style Terminal Follow-Up
+- [x] Implement a real indicators menu with selectable overlays instead of static indicator labels
+- [x] Add a crosshair-linked chart legend/status readout for OHLC and volume values
+- [x] Add explicit websocket/chart market-data error handling and recovery state in the terminal UI
+- [x] Clarify unsupported pending limit/stop order staging in the UI and prevent it from appearing as executable functionality
+
+## Phase 16: Execution Verification Before Delivery
+- [x] Add focused regression coverage for authenticated Buy/Sell submission validation, live quote pricing, and open-position pricing
+- [x] Verify the selectable crypto symbol set against active database instruments and the live quote source with a documented query result
+- [x] Capture authenticated `/trade` verification or clearly preserve the login-blocked limitation in the delivery notes
+- [ ] Save the final checkpoint after the execution verification work is complete

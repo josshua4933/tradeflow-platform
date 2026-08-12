@@ -3,6 +3,7 @@ import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { getInstruments, getInstrumentBySymbol, getTradingSignals, getEconomicEvents } from "../db";
 import { getCachedPrices } from "../binance";
 import { getBinanceKlines } from "../binanceKlines";
+import { getLatestBinancePrice } from "../binanceStream";
 
 // ─── Price Simulation Engine ──────────────────────────────────────────────────
 // Base prices for all instruments
@@ -20,23 +21,29 @@ const BASE_PRICES: Record<string, number> = {
 const priceState: Record<string, { price: number; lastUpdate: number }> = {};
 
 export function getCurrentPrice(symbol: string): { bid: number; ask: number; price: number } {
-  const base = BASE_PRICES[symbol] ?? 100;
+  const normalizedSymbol = symbol.toUpperCase();
+  const base = BASE_PRICES[normalizedSymbol] ?? 100;
   const now = Date.now();
-  
-  if (!priceState[symbol]) {
-    priceState[symbol] = { price: base, lastUpdate: now };
+  const livePrice = getLatestBinancePrice(normalizedSymbol);
+
+  if (!priceState[normalizedSymbol]) {
+    priceState[normalizedSymbol] = { price: livePrice ?? base, lastUpdate: now };
   }
-  
-  const state = priceState[symbol];
-  const elapsed = (now - state.lastUpdate) / 1000;
-  
-  // Simulate realistic price movement
-  const volatility = getVolatility(symbol);
-  const drift = (Math.random() - 0.499) * volatility * Math.sqrt(elapsed);
-  state.price = Math.max(state.price * (1 + drift), base * 0.5);
-  state.lastUpdate = now;
-  
-  const spread = getSpread(symbol);
+
+  const state = priceState[normalizedSymbol];
+  if (livePrice !== null) {
+    // Use the same Binance stream price as the terminal instead of a second simulated feed.
+    state.price = livePrice;
+    state.lastUpdate = now;
+  } else {
+    const elapsed = (now - state.lastUpdate) / 1000;
+    const volatility = getVolatility(normalizedSymbol);
+    const drift = (Math.random() - 0.499) * volatility * Math.sqrt(elapsed);
+    state.price = Math.max(state.price * (1 + drift), base * 0.5);
+    state.lastUpdate = now;
+  }
+
+  const spread = getSpread(normalizedSymbol);
   return {
     price: state.price,
     bid: state.price - spread / 2,

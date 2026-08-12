@@ -66,6 +66,7 @@ export function useWebSocket() {
   const [tradeExecutions, setTradeExecutions] = useState<TradeExecution[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [candles, setCandles] = useState<Map<string, Candle>>(new Map());
+  const [marketDataErrors, setMarketDataErrors] = useState<Array<{ type: string; symbol?: string; interval?: string; message: string; timestamp: number }>>([]);
   const pendingCandleSubscriptions = useRef(new Set<string>());
 
   // Initialize WebSocket connection
@@ -144,8 +145,22 @@ export function useWebSocket() {
       });
     });
 
-    // Errors
-    socket.on("error", (error) => {
+    // Market-data and transport errors
+    socket.on("market_data_error", (error: { type?: string; symbol?: string; interval?: string; message?: string }) => {
+      const entry = {
+        type: error.type ?? "market_data",
+        symbol: error.symbol,
+        interval: error.interval,
+        message: error.message ?? "Market data is temporarily unavailable.",
+        timestamp: Date.now(),
+      };
+      setMarketDataErrors((previous) => [entry, ...previous].slice(0, 20));
+      console.error("[WebSocket] Market data error:", entry);
+    });
+
+    socket.on("error", (error: { message?: string }) => {
+      const entry = { type: "transport", message: error?.message ?? "WebSocket connection error.", timestamp: Date.now() };
+      setMarketDataErrors((previous) => [entry, ...previous].slice(0, 20));
       console.error("[WebSocket] Error:", error);
     });
 
@@ -166,6 +181,14 @@ export function useWebSocket() {
     if (socketRef.current?.connected) {
       socketRef.current.emit("unsubscribe_prices", { symbols });
     }
+  }, []);
+
+  const clearMarketDataErrors = useCallback((symbol?: string, interval?: string) => {
+    setMarketDataErrors((previous) => previous.filter((error) => {
+      if (symbol && error.symbol !== symbol) return true;
+      if (interval && error.interval !== interval) return true;
+      return false;
+    }));
   }, []);
 
   // Get price for symbol
@@ -208,5 +231,7 @@ export function useWebSocket() {
     candles: Array.from(candles.values()),
     getCandle,
     subscribeToCandles,
+    marketDataErrors,
+    clearMarketDataErrors,
   };
 }

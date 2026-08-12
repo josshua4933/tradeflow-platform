@@ -240,8 +240,8 @@ export default function TradingLayout({ children }: { children: React.ReactNode 
         )}
 
         {/* ─── Main Content ─────────────────────────────────────────────── */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
+        <main className="min-w-0 flex-1 overflow-y-auto p-0">
+          <div className="w-full min-w-0">{children}</div>
         </main>
       </div>
     </div>

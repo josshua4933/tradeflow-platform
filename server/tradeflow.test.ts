@@ -3,6 +3,15 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { getBinanceKlines } from "./binanceKlines";
 
+vi.mock("./binanceStream", () => ({
+  getLatestBinancePrice: vi.fn((symbol: string) => symbol.toUpperCase() === "BTCUSD" ? 65432.1 : null),
+  normalizeBinanceSymbol: (symbol: string) => symbol.toUpperCase().endsWith("USDT") ? `${symbol.toUpperCase().slice(0, -4)}USD` : symbol.toUpperCase(),
+  initializeBinanceStream: vi.fn(),
+  isBinanceStreamConnected: vi.fn(() => false),
+  disconnectBinanceStream: vi.fn(),
+  getSubscribedPairs: vi.fn(() => []),
+}));
+
 // ─── Mock DB ─────────────────────────────────────────────────────────────────
 vi.mock("./db", () => ({
   getDb: vi.fn().mockResolvedValue(null),
@@ -496,4 +505,118 @@ describe("live market candles", () => {
     expect(candle?.time).toBeGreaterThan(1_000_000_000);
     expect([candle?.open, candle?.high, candle?.low, candle?.close, candle?.volume].every(Number.isFinite)).toBe(true);
   }, 15_000);
+});
+
+
+describe("terminal order execution contract", () => {
+  const btcInstrument = {
+    id: 5,
+    symbol: "BTCUSD",
+    name: "Bitcoin / USD",
+    category: "crypto",
+    baseAsset: "BTC",
+    quoteAsset: "USD",
+    minLotSize: "0.001",
+    maxLotSize: "10",
+    lotStep: "0.001",
+    pipValue: "1",
+    spread: "50",
+    isActive: true,
+    contractSize: "1",
+    pipSize: "1",
+    marginRequirement: "1",
+  };
+
+  it("accepts a valid authenticated Buy request and persists the executable ask quote", async () => {
+    const { getInstrumentBySymbol, createTrade } = await import("./db");
+    vi.mocked(getInstrumentBySymbol).mockResolvedValueOnce(btcInstrument as any);
+    const caller = appRouter.createCaller(makeCtx());
+
+    const result = await caller.trading.placeTrade({ symbol: "BTCUSD", type: "buy", lotSize: 0.001, leverage: 100 });
+
+    expect(result.success).toBe(true);
+    expect(result.openPrice).toBeGreaterThan(0);
+    expect(Number(result.margin)).toBeGreaterThan(0);
+    expect(vi.mocked(createTrade)).toHaveBeenCalledWith(expect.objectContaining({ symbol: "BTCUSD", type: "buy", openPrice: String(result.openPrice) }));
+  });
+
+  it("rejects invalid Buy/Sell quantities before execution", async () => {
+    const caller = appRouter.createCaller(makeCtx());
+
+    await expect(caller.trading.placeTrade({ symbol: "BTCUSD", type: "sell", lotSize: 0, leverage: 100 })).rejects.toThrow();
+  });
+
+  it("uses the same executable market quote path when enriching open positions", async () => {
+    const { getOpenTrades } = await import("./db");
+    vi.mocked(getOpenTrades).mockResolvedValueOnce([{
+      id: 77,
+      userId: 1,
+      walletId: 1,
+      instrumentId: 5,
+      symbol: "BTCUSD",
+      type: "buy",
+      lotSize: "0.001",
+      openPrice: "62000",
+      margin: "0.62",
+      status: "open",
+      openedAt: new Date(),
+    }] as any);
+    const caller = appRouter.createCaller(makeCtx());
+
+    const [position] = await caller.trading.openTrades();
+
+    expect(position.symbol).toBe("BTCUSD");
+    expect(Number(position.currentPrice)).toBeGreaterThan(0);
+    expect(Number.isFinite(Number(position.unrealizedPnl))).toBe(true);
+  });
+});
+
+
+describe("deterministic Binance-backed Buy/Sell pricing", () => {
+  const btcInstrument = {
+    id: 5,
+    symbol: "BTCUSD",
+    name: "Bitcoin / USD",
+    category: "crypto",
+    baseAsset: "BTC",
+    quoteAsset: "USD",
+    minLotSize: "0.001",
+    maxLotSize: "10",
+    lotStep: "0.001",
+    pipValue: "1",
+    spread: "50",
+    isActive: true,
+    contractSize: "1",
+    pipSize: "1",
+    marginRequirement: "1",
+  };
+
+  it("opens a SELL at the shared Binance-backed bid quote", async () => {
+    const { getInstrumentBySymbol, createTrade } = await import("./db");
+    vi.mocked(getInstrumentBySymbol).mockResolvedValueOnce(btcInstrument as any);
+    const caller = appRouter.createCaller(makeCtx());
+
+    const result = await caller.trading.placeTrade({ symbol: "BTCUSD", type: "sell", lotSize: 0.001, leverage: 100 });
+
+    expect(result.openPrice).toBe(65427.1);
+    expect(vi.mocked(createTrade)).toHaveBeenCalledWith(expect.objectContaining({ type: "sell", openPrice: "65427.1" }));
+  });
+
+  it("returns a NOT_FOUND error for an unavailable instrument", async () => {
+    const { getInstrumentBySymbol } = await import("./db");
+    vi.mocked(getInstrumentBySymbol).mockResolvedValueOnce(undefined);
+    const caller = appRouter.createCaller(makeCtx());
+
+    await expect(caller.trading.placeTrade({ symbol: "UNKNOWNUSD", type: "buy", lotSize: 0.001, leverage: 100 })).rejects.toMatchObject({ code: "NOT_FOUND", message: "Instrument not found" });
+  });
+
+  it("returns an insufficient-margin error before creating a trade", async () => {
+    const { getInstrumentBySymbol, getDefaultWallet, createTrade } = await import("./db");
+    vi.mocked(getInstrumentBySymbol).mockResolvedValueOnce(btcInstrument as any);
+    vi.mocked(getDefaultWallet).mockResolvedValueOnce({ id: 1, userId: 1, currency: "USD", balance: "1.00", equity: "1.00", margin: "0.00", freeMargin: "1.00", leverage: 100, isDefault: true, createdAt: new Date() } as any);
+    const caller = appRouter.createCaller(makeCtx());
+
+    await expect(caller.trading.placeTrade({ symbol: "BTCUSD", type: "buy", lotSize: 1, leverage: 1 })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("Insufficient margin") });
+    expect(vi.mocked(createTrade)).not.toHaveBeenCalledWith(expect.objectContaining({ symbol: "BTCUSD", lotSize: "1" }));
+  });
 });

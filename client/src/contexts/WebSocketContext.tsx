@@ -58,6 +58,8 @@ interface Candle {
 
 interface WebSocketContextType {
   isConnected: boolean;
+  marketDataErrors: Array<{ type: string; symbol?: string; interval?: string; message: string; timestamp: number }>;
+  clearMarketDataErrors: (symbol?: string, interval?: string) => void;
   prices: PriceUpdate[];
   getPrice: (symbol: string) => PriceUpdate | undefined;
   subscribePrices: (symbols: string[]) => void;

@@ -10,6 +10,7 @@ interface BinanceStreamPrice {
 
 let binanceWs: WebSocket | null = null;
 let isConnected = false;
+const latestPrices = new Map<string, number>();
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY = 3000;
@@ -116,15 +117,16 @@ function handleBinanceMessage(message: any) {
 
   // Handle ticker data
   if (message.e === "24hrTicker") {
+    const symbol = normalizeBinanceSymbol(String(message.s));
     const price: BinanceStreamPrice = {
-      symbol: message.s,
-      price: parseFloat(message.c), // Current price
-      changePercent24h: parseFloat(message.P), // 24h change percent
+      symbol,
+      price: parseFloat(message.c),
+      changePercent24h: parseFloat(message.P),
       timestamp: Date.now(),
     };
 
-    // Broadcast to all connected clients
-    broadcastPriceUpdate(price.symbol, price);
+    latestPrices.set(symbol, price.price);
+    broadcastPriceUpdate(symbol, price);
   }
 }
 
@@ -152,6 +154,16 @@ export function disconnectBinanceStream() {
  */
 export function getSubscribedPairs(): string[] {
   return CRYPTO_PAIRS;
+}
+
+export function normalizeBinanceSymbol(symbol: string): string {
+  const normalized = symbol.toUpperCase();
+  return normalized.endsWith("USDT") ? `${normalized.slice(0, -4)}USD` : normalized;
+}
+
+export function getLatestBinancePrice(symbol: string): number | null {
+  const price = latestPrices.get(symbol.toUpperCase());
+  return price !== undefined && Number.isFinite(price) ? price : null;
 }
 
 /**
