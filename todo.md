@@ -159,4 +159,4 @@
 - [x] Centralize the stop-out threshold and equity/free-margin liquidation rules so the policy is explicit and testable
 - [x] Add cron-handler tests for cron-only authentication, idempotent account sweeping, and structured error responses
 - [x] Add a repeated-sweep regression test proving no duplicate wallet credit, transaction, or trade closure occurs on a second run
-- [ ] Create and activate the project-level Heartbeat schedule after the deployed callback is available
+- [x] Create and activate the project-level Heartbeat schedule after the deployed callback is available
