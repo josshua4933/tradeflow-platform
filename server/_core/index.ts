@@ -14,6 +14,7 @@ import { handlePalPlusWebhook } from "../palPlusWebhook";
 import { initializeWebSocket, startPriceStreaming } from "../websocket";
 import { initializeBinanceStream } from "../binanceStream";
 import { initializeBinanceKlines } from "../binanceKlines";
+import { handleSettlementSweep } from "../scheduledSettlement";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -51,6 +52,8 @@ async function startServer() {
   registerStripeWebhook(app);
   // Register PalPlus webhook BEFORE express.json() for signature verification
   app.post("/api/payplus/webhook", express.raw({ type: "application/json" }), handlePalPlusWebhook);
+  // Heartbeat invokes this deployed endpoint; no in-process timer is used.
+  app.post("/api/scheduled/settleAccounts", handleSettlementSweep);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

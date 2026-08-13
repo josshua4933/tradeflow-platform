@@ -399,7 +399,7 @@ function OrderPanel({ symbol, price, bid, ask }: { symbol: string; price: number
 function TradePanel({ symbol, price }: { symbol: string; price: number }) {
   const utils = trpc.useUtils();
   const { data: openTrades, isLoading: openLoading } = trpc.trading.openTrades.useQuery(undefined, { refetchInterval: 3000 });
-  const { data: history, isLoading: historyLoading } = trpc.trading.tradeHistory.useQuery();
+  const { data: history, isLoading: historyLoading } = trpc.trading.tradeHistory.useQuery({ limit: 100 }, { refetchInterval: 5000 });
   const { data: summary } = trpc.trading.portfolioSummary.useQuery(undefined, { refetchInterval: 5000 });
   const { data: instrument } = trpc.market.instrumentBySymbol.useQuery({ symbol });
   const closeTrade = trpc.trading.closeTrade.useMutation({

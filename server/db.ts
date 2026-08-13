@@ -134,6 +134,16 @@ export async function getDefaultWallet(userId: number) {
   return result[0];
 }
 
+export async function getUserIdsWithDefaultWallet() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ userId: wallets.userId })
+    .from(wallets)
+    .where(eq(wallets.isDefault, true));
+  return Array.from(new Set(rows.map((row) => row.userId)));
+}
+
 export async function createWallet(data: {
   userId: number;
   currency: string;
@@ -306,10 +316,10 @@ export async function closeTrade(
   tradeId: number,
   closePrice: string,
   profit: string
-) {
+): Promise<boolean> {
   const db = await getDb();
-  if (!db) return;
-  await db
+  if (!db) return false;
+  const result = await db
     .update(trades)
     .set({
       status: "closed",
@@ -317,7 +327,9 @@ export async function closeTrade(
       profit,
       closedAt: new Date(),
     })
-    .where(eq(trades.id, tradeId));
+    .where(and(eq(trades.id, tradeId), eq(trades.status, "open")));
+  const affectedRows = (result as unknown as { affectedRows?: number }).affectedRows ?? 0;
+  return Number(affectedRows) > 0;
 }
 
 export async function updateTradeSlTp(

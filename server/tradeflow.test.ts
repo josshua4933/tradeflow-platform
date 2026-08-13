@@ -548,7 +548,7 @@ describe("terminal order execution contract", () => {
 
   it("uses the same executable market quote path when enriching open positions", async () => {
     const { getOpenTrades } = await import("./db");
-    vi.mocked(getOpenTrades).mockResolvedValueOnce([{
+    vi.mocked(getOpenTrades).mockResolvedValue([{
       id: 77,
       userId: 1,
       walletId: 1,
@@ -603,8 +603,10 @@ describe("deterministic Binance-backed Buy/Sell pricing", () => {
   });
 
   it("returns a NOT_FOUND error for an unavailable instrument", async () => {
-    const { getInstrumentBySymbol } = await import("./db");
-    vi.mocked(getInstrumentBySymbol).mockResolvedValueOnce(undefined);
+    const { getInstrumentBySymbol, getOpenTrades, getDefaultWallet } = await import("./db");
+    vi.mocked(getOpenTrades).mockReset().mockResolvedValue([]);
+    vi.mocked(getDefaultWallet).mockReset().mockResolvedValue({ id: 1, userId: 1, currency: "USD", balance: "10000.00", equity: "10000.00", margin: "0.00", freeMargin: "10000.00", leverage: 100, isDefault: true, createdAt: new Date() } as any);
+    vi.mocked(getInstrumentBySymbol).mockReset().mockResolvedValueOnce(undefined);
     const caller = appRouter.createCaller(makeCtx());
 
     await expect(caller.trading.placeTrade({ symbol: "UNKNOWNUSD", type: "buy", lotSize: 0.001, leverage: 100 })).rejects.toMatchObject({ code: "NOT_FOUND", message: "Instrument not found" });
@@ -613,7 +615,7 @@ describe("deterministic Binance-backed Buy/Sell pricing", () => {
   it("returns an insufficient-margin error before creating a trade", async () => {
     const { getInstrumentBySymbol, getDefaultWallet, createTrade } = await import("./db");
     vi.mocked(getInstrumentBySymbol).mockResolvedValueOnce(btcInstrument as any);
-    vi.mocked(getDefaultWallet).mockResolvedValueOnce({ id: 1, userId: 1, currency: "USD", balance: "1.00", equity: "1.00", margin: "0.00", freeMargin: "1.00", leverage: 100, isDefault: true, createdAt: new Date() } as any);
+    vi.mocked(getDefaultWallet).mockResolvedValue({ id: 1, userId: 1, currency: "USD", balance: "1.00", equity: "1.00", margin: "0.00", freeMargin: "1.00", leverage: 100, isDefault: true, createdAt: new Date() } as any);
     const caller = appRouter.createCaller(makeCtx());
 
     await expect(caller.trading.placeTrade({ symbol: "BTCUSD", type: "buy", lotSize: 1, leverage: 1 })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("Insufficient margin") });

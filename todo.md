@@ -143,4 +143,20 @@
 - [x] Add focused regression coverage for authenticated Buy/Sell submission validation, live quote pricing, and open-position pricing
 - [x] Verify the selectable crypto symbol set against active database instruments and the live quote source with a documented query result
 - [x] Capture authenticated `/trade` verification or clearly preserve the login-blocked limitation in the delivery notes
-- [ ] Save the final checkpoint after the execution verification work is complete
+- [x] Save the final checkpoint after the execution verification work is complete
+
+## Phase 17: Position Lifecycle and Account Settlement
+- [x] Add a shared position settlement helper that calculates close-side execution price and realized P&L consistently for buy and sell positions
+- [x] Recalculate wallet balance, equity, used margin, free margin, and margin level after every close or automatic settlement
+- [x] Automatically close positions when stop-loss or take-profit is reached and release their reserved margin
+- [x] Automatically liquidate positions when account equity/free margin breaches the configured liquidation threshold
+- [x] Add focused tests for realized P&L, margin release, stop-loss/take-profit, and liquidation behavior
+- [x] Refresh the closed-trade history panel after automatic settlement so realized P&L is visible immediately
+- [x] Reconcile persisted wallet margin and free margin against currently open trades even when a position was previously closed without releasing its reservation
+
+## Phase 18: Autonomous Settlement Sweep
+- [x] Add a platform-safe `/api/scheduled/settleAccounts` callback that sweeps every funded account without relying on in-process timers
+- [x] Centralize the stop-out threshold and equity/free-margin liquidation rules so the policy is explicit and testable
+- [x] Add cron-handler tests for cron-only authentication, idempotent account sweeping, and structured error responses
+- [x] Add a repeated-sweep regression test proving no duplicate wallet credit, transaction, or trade closure occurs on a second run
+- [ ] Create and activate the project-level Heartbeat schedule after the deployed callback is available
