@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { createChart, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, CandlestickSeries } from "lightweight-charts";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
+import { normalizeHistoricalCandles, LiveCandleGuard } from "./chartNormalization";
 import { filterTerminalSymbols, formatMoney, formatPrice, getQuoteSides } from "./tradingTerminal.helpers";
 
 type ChartMode = "candles" | "line";
@@ -212,17 +213,7 @@ function PriceChart({
 
   useEffect(() => {
     if (!candles?.length || !candleSeriesRef.current) return;
-    const data = candles
-      .map((c: any) => ({
-        time: Math.floor(Number(c.time)) as any,
-        open: Number(c.open),
-        high: Number(c.high),
-        low: Number(c.low),
-        close: Number(c.close),
-        volume: Number(c.volume ?? 0),
-      }))
-      .filter((c: any) => c.time > 0 && [c.open, c.high, c.low, c.close].every(Number.isFinite))
-      .sort((a: any, b: any) => a.time - b.time);
+    const data = normalizeHistoricalCandles(candles as any);
     if (!data.length) return;
 
     candleSeriesRef.current.setData(data);
@@ -248,18 +239,31 @@ function PriceChart({
     chartInstance.current?.timeScale().fitContent();
   }, [candles]);
 
+  const liveGuardRef = useRef(new LiveCandleGuard());
+
+  useEffect(() => {
+    liveGuardRef.current.reset(0);
+  }, [symbol, timeframe]);
+
   useEffect(() => {
     const wsCandle = getCandle(symbol, timeframe);
     if (!wsCandle || !candleSeriesRef.current) return;
-    const candleTime = Math.floor(wsCandle.openTime / 1000) as any;
-    const update = { time: candleTime, open: wsCandle.open, high: wsCandle.high, low: wsCandle.low, close: wsCandle.close };
-    candleSeriesRef.current.update(update);
-    lineSeriesRef.current?.update({ time: candleTime, value: wsCandle.close });
-    volumeSeriesRef.current?.update({
-      time: candleTime,
-      value: wsCandle.volume,
-      color: wsCandle.close >= wsCandle.open ? "#26a69a55" : "#ef535055",
-    });
+    const rawTime = Number(wsCandle.openTime);
+    const candleTime = Math.floor(rawTime > 1e12 ? rawTime / 1000 : rawTime);
+    if (!liveGuardRef.current.accept(candleTime)) return;
+
+    const update = { time: candleTime as any, open: wsCandle.open, high: wsCandle.high, low: wsCandle.low, close: wsCandle.close };
+    try {
+      candleSeriesRef.current.update(update);
+      lineSeriesRef.current?.update({ time: candleTime as any, value: wsCandle.close });
+      volumeSeriesRef.current?.update({
+        time: candleTime as any,
+        value: wsCandle.volume,
+        color: wsCandle.close >= wsCandle.open ? "#26a69a55" : "#ef535055",
+      });
+    } catch (error) {
+      console.warn("[TradingTerminal] Chart update error suppressed:", error);
+    }
   }, [wsCandles, symbol, timeframe, getCandle]);
 
   return (

@@ -160,3 +160,9 @@
 - [x] Add cron-handler tests for cron-only authentication, idempotent account sweeping, and structured error responses
 - [x] Add a repeated-sweep regression test proving no duplicate wallet credit, transaction, or trade closure occurs on a second run
 - [x] Create and activate the project-level Heartbeat schedule after the deployed callback is available
+
+## Phase 19: Lightweight Charts Timestamp Ordering Fix
+- [x] Sort historical and live candles monotonically by timestamp in the Trading Terminal
+- [x] Deduplicate and filter out stale or out-of-order candle updates before calling `series.update()` or `series.setData()`
+- [x] Add unit tests for monotonic sorting and duplicate/stale candle filtering in Lightweight Charts
+- [x] Run full test suite, rebuild, and save checkpoint
