@@ -166,3 +166,10 @@
 - [x] Deduplicate and filter out stale or out-of-order candle updates before calling `series.update()` or `series.setData()`
 - [x] Add unit tests for monotonic sorting and duplicate/stale candle filtering in Lightweight Charts
 - [x] Run full test suite, rebuild, and save checkpoint
+
+## Phase 20: TradingView-Style Custom Drawing Tools (Trendlines & Horizontal Levels)
+- [x] Add a drawing tool selector to the chart toolbar (Pointer, Horizontal Line, Trendline)
+- [x] Implement click-to-place horizontal levels and two-point trendlines mapping mouse coordinates to time/price chart scales
+- [x] Render active drawings as SVG overlays or Lightweight Charts price lines with selection, delete, and clear-all controls
+- [x] Add unit coverage for coordinate mapping, drawing creation, and deletion state management
+- [x] Run test suite, rebuild, and save checkpoint
