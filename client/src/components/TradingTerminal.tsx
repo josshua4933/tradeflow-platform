@@ -322,6 +322,9 @@ function OrderPanel({ symbol, price, bid, ask }: { symbol: string; price: number
     stopLossPips: stopLoss ? Math.abs((price - Number(stopLoss)) / 0.0001) : undefined,
   }, { enabled: canTrade && price > 0 });
 
+  const [isBuying, setIsBuying] = useState(false);
+  const [isSelling, setIsSelling] = useState(false);
+
   const placeTrade = trpc.trading.placeTrade.useMutation({
     onSuccess: (data) => {
       const message = `Trade opened at ${formatPrice(data.openPrice, symbol)} · margin ${formatMoney(data.margin)}`;
@@ -336,7 +339,7 @@ function OrderPanel({ symbol, price, bid, ask }: { symbol: string; price: number
     },
   });
 
-  const handleTrade = (type: "buy" | "sell") => {
+  const handleTrade = async (type: "buy" | "sell") => {
     const numericLotSize = Number(lotSize);
     const numericLeverage = Number(leverage);
     const numericStopLoss = stopLoss ? Number(stopLoss) : undefined;
@@ -353,7 +356,15 @@ function OrderPanel({ symbol, price, bid, ask }: { symbol: string; price: number
     if (numericStopLoss !== undefined && !Number.isFinite(numericStopLoss)) return toast.error("Stop loss must be a valid price");
     if (numericTakeProfit !== undefined && !Number.isFinite(numericTakeProfit)) return toast.error("Take profit must be a valid price");
 
-    placeTrade.mutate({ symbol, type, lotSize: numericLotSize, leverage: numericLeverage, stopLoss: numericStopLoss, takeProfit: numericTakeProfit });
+    if (type === "buy") setIsBuying(true);
+    else setIsSelling(true);
+
+    try {
+      await placeTrade.mutateAsync({ symbol, type, lotSize: numericLotSize, leverage: numericLeverage, stopLoss: numericStopLoss, takeProfit: numericTakeProfit });
+    } finally {
+      if (type === "buy") setIsBuying(false);
+      else setIsSelling(false);
+    }
   };
 
   return (
@@ -407,7 +418,16 @@ function OrderPanel({ symbol, price, bid, ask }: { symbol: string; price: number
           {executionMessage && <div className={`rounded border p-2 text-[11px] ${placeTrade.error ? "border-[#6b2c32] bg-[#281316] text-[#ff8b91]" : "border-[#1f665d] bg-[#10221f] text-[#7ce4d2]"}`} role="status" aria-live="polite">{executionMessage}</div>}
           {!canTrade && !instrumentLoading && <div className="rounded border border-[#6b2c32] bg-[#281316] p-2 text-[11px] text-[#ff8b91]" role="alert">This symbol has no active execution instrument.</div>}
 
-          <div className="mt-auto grid grid-cols-2 gap-2"><Button onClick={() => handleTrade("sell")} disabled={placeTrade.isPending || !canTrade || bid <= 0 || orderMode !== "market"} aria-busy={placeTrade.isPending} className="h-11 bg-[#b83c46] text-white hover:bg-[#c84a54] disabled:opacity-50">{placeTrade.isPending ? <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" /> : <TrendingDown className="mr-1.5 h-4 w-4" />}{placeTrade.isPending ? "EXECUTING" : "SELL"}</Button><Button onClick={() => handleTrade("buy")} disabled={placeTrade.isPending || !canTrade || ask <= 0 || orderMode !== "market"} aria-busy={placeTrade.isPending} className="h-11 bg-[#178f7e] text-white hover:bg-[#1da997] disabled:opacity-50">{placeTrade.isPending ? <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" /> : <TrendingUp className="mr-1.5 h-4 w-4" />}{placeTrade.isPending ? "EXECUTING" : "BUY"}</Button></div>
+          <div className="mt-auto grid grid-cols-2 gap-2">
+            <Button onClick={() => handleTrade("sell")} disabled={isSelling || isBuying || !canTrade || bid <= 0 || orderMode !== "market"} aria-busy={isSelling} className="h-11 bg-[#b83c46] text-white hover:bg-[#c84a54] disabled:opacity-50">
+              {isSelling ? <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" /> : <TrendingDown className="mr-1.5 h-4 w-4" />}
+              {isSelling ? "EXECUTING" : "SELL"}
+            </Button>
+            <Button onClick={() => handleTrade("buy")} disabled={isSelling || isBuying || !canTrade || ask <= 0 || orderMode !== "market"} aria-busy={isBuying} className="h-11 bg-[#178f7e] text-white hover:bg-[#1da997] disabled:opacity-50">
+              {isBuying ? <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" /> : <TrendingUp className="mr-1.5 h-4 w-4" />}
+              {isBuying ? "EXECUTING" : "BUY"}
+            </Button>
+          </div>
         </div>
       )}
     </div>

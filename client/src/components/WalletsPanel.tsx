@@ -24,7 +24,10 @@ export default function WalletsPanel() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState("USD");
-  const [isProcessing, setIsProcessing] = useState(false);
+  
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
   const [withdrawalPhone, setWithdrawalPhone] = useState("");
   const [selectedWithdrawalWallet, setSelectedWithdrawalWallet] = useState<number | null>(null);
@@ -45,7 +48,7 @@ export default function WalletsPanel() {
       return;
     }
 
-    setIsProcessing(true);
+    setIsWithdrawing(true);
     try {
       const result = await withdrawalMutation.mutateAsync({
         amount: parseFloat(withdrawalAmount),
@@ -62,7 +65,7 @@ export default function WalletsPanel() {
     } catch (error: any) {
       toast.error("Failed to process withdrawal. Please try again.");
     } finally {
-      setIsProcessing(false);
+      setIsWithdrawing(false);
     }
   };
 
@@ -72,7 +75,7 @@ export default function WalletsPanel() {
       return;
     }
 
-    setIsProcessing(true);
+    setIsDepositing(true);
     try {
       const result = await depositMutation.mutateAsync({
         amount: parseFloat(depositAmount),
@@ -84,7 +87,6 @@ export default function WalletsPanel() {
 
       if (result.success) {
         toast.success(`STK push sent for ${amountInKSH} KSH! Check your phone.`);
-        // Redirect to confirmation page
         setTimeout(() => {
           setLocation(`/deposit-confirmation?txnId=${result.transactionId}&amount=${depositAmount}&currency=USD&phone=${phoneNumber}`);
         }, 500);
@@ -92,10 +94,9 @@ export default function WalletsPanel() {
         setPhoneNumber("");
       }
     } catch (error: any) {
-      // Error is already handled by tRPC, just show generic message
       toast.error("Failed to send STK push. Please try again.");
     } finally {
-      setIsProcessing(false);
+      setIsDepositing(false);
     }
   };
 
@@ -153,7 +154,7 @@ export default function WalletsPanel() {
               id="withdrawal-wallet"
               value={selectedWithdrawalWallet || ""}
               onChange={(e) => setSelectedWithdrawalWallet(e.target.value ? parseInt(e.target.value) : null)}
-              disabled={isProcessing}
+              disabled={isWithdrawing}
               className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
             >
               <option value="">Choose a wallet...</option>
@@ -175,7 +176,7 @@ export default function WalletsPanel() {
               onChange={(e) => setWithdrawalAmount(e.target.value)}
               min="1"
               max="100000"
-              disabled={isProcessing}
+              disabled={isWithdrawing}
             />
             <p className="text-xs text-muted-foreground mt-1">Minimum: $1 | Maximum: $100,000</p>
           </div>
@@ -188,17 +189,17 @@ export default function WalletsPanel() {
               placeholder="Enter your phone number"
               value={withdrawalPhone}
               onChange={(e) => setWithdrawalPhone(e.target.value)}
-              disabled={isProcessing}
+              disabled={isWithdrawing}
             />
             <p className="text-xs text-muted-foreground mt-1">Confirmation will be sent to this number</p>
           </div>
 
           <Button
             onClick={handleWithdrawal}
-            disabled={!selectedWithdrawalWallet || !withdrawalAmount || !withdrawalPhone || isProcessing}
+            disabled={!selectedWithdrawalWallet || !withdrawalAmount || !withdrawalPhone || isWithdrawing}
             className="w-full"
           >
-            {isProcessing ? (
+            {isWithdrawing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Processing Withdrawal...
@@ -223,7 +224,7 @@ export default function WalletsPanel() {
               id="currency"
               value={selectedCurrency}
               onChange={(e) => setSelectedCurrency(e.target.value)}
-              disabled={isProcessing}
+              disabled={isDepositing}
               className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
             >
               {SUPPORTED_CURRENCIES.map((curr) => (
@@ -244,7 +245,7 @@ export default function WalletsPanel() {
               onChange={(e) => setDepositAmount(e.target.value)}
               min="10"
               max="100000"
-              disabled={isProcessing}
+              disabled={isDepositing}
             />
             <p className="text-xs text-muted-foreground mt-1">Minimum: 10 {selectedCurrency} | Maximum: 100,000 {selectedCurrency}</p>
             {depositAmount && (
@@ -262,17 +263,17 @@ export default function WalletsPanel() {
               placeholder="Enter your phone number"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
-              disabled={isProcessing}
+              disabled={isDepositing}
             />
             <p className="text-xs text-muted-foreground mt-1">STK push will be sent to this number</p>
           </div>
 
           <Button
             onClick={handleDeposit}
-            disabled={!selectedWallet || !depositAmount || !phoneNumber || isProcessing}
+            disabled={!selectedWallet || !depositAmount || !phoneNumber || isDepositing}
             className="w-full"
           >
-            {isProcessing ? (
+            {isDepositing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Sending STK Push...
