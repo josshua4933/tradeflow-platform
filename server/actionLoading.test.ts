@@ -6,6 +6,7 @@ import {
   getDepositButtonLabel,
   getIndependentActionBusyState,
 } from "../client/src/components/walletAction.helpers";
+import { normalizePalPlussStkResponse } from "./payplus";
 
 describe("action loading state isolation", () => {
   it("shows busy feedback only for the active wallet action", () => {
@@ -40,6 +41,28 @@ describe("deposit success feedback", () => {
     expect(getDepositStatusPath(notice)).toBe(
       "/deposit-confirmation?txnId=TF-DEP-1-ABC12345&amount=10&currency=USD&phone=0710852136",
     );
+  });
+});
+
+describe("PalPluss STK response normalization", () => {
+  it("treats an accepted 2xx response without transactionId as initiated", () => {
+    const result = normalizePalPlussStkResponse({
+      data: { status: "pending", message: "STK push sent" },
+      httpStatus: 200,
+      accountReference: "TF-DEP-1-LOCALREF",
+    });
+
+    expect(result).toEqual({ success: true, transactionId: "TF-DEP-1-LOCALREF", status: "pending" });
+  });
+
+  it("keeps explicit provider failures as failures", () => {
+    const result = normalizePalPlussStkResponse({
+      data: { success: false, error: "Phone is unreachable" },
+      httpStatus: 200,
+      accountReference: "TF-DEP-1-LOCALREF",
+    });
+
+    expect(result).toEqual({ success: false, error: "Phone is unreachable" });
   });
 });
 

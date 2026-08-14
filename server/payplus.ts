@@ -66,11 +66,41 @@ interface PalPlussSTKPushRequest {
   currency?: string; // Added currency support
 }
 
-interface PalPlussResponse {
+export interface PalPlussResponse {
   success: boolean;
   transactionId?: string;
   status?: string;
   error?: string;
+}
+
+/**
+ * PalPluss can accept an STK request with a 2xx response body that does not
+ * include a transactionId. The local account reference is still a stable
+ * identifier for the pending wallet transaction and confirmation polling.
+ */
+export function normalizePalPlussStkResponse(input: {
+  data: any;
+  httpStatus: number;
+  accountReference: string;
+}): PalPlussResponse {
+  const data = input.data && typeof input.data === "object" ? input.data : {};
+  const status = typeof data.status === "string" ? data.status : "pending";
+  const normalizedStatus = status.toLowerCase();
+  const explicitFailure = data.success === false || Boolean(data.error) || ["failed", "error", "rejected", "cancelled"].includes(normalizedStatus);
+
+  if (input.httpStatus < 200 || input.httpStatus >= 300 || explicitFailure) {
+    return {
+      success: false,
+      error: data.error || "Failed to initiate STK push",
+    };
+  }
+
+  const transactionId = data.transactionId || data.transaction_id || data.checkoutRequestId || data.merchantRequestId || data.requestId || data.id || input.accountReference;
+  return {
+    success: true,
+    transactionId: String(transactionId),
+    status,
+  };
 }
 
 /**
@@ -115,19 +145,11 @@ export async function createPalPlussSTKPush(
     );
 
     console.log(`[PalPluss] STK push response:`, response.data);
-
-    if (response.data && response.data.transactionId) {
-      return {
-        success: true,
-        transactionId: response.data.transactionId,
-        status: response.data.status || "pending",
-      };
-    }
-
-    return {
-      success: false,
-      error: "Failed to initiate STK push",
-    };
+    return normalizePalPlussStkResponse({
+      data: response.data,
+      httpStatus: response.status,
+      accountReference: req.accountReference,
+    });
   } catch (error: any) {
     console.error("[PalPluss STK Push Error]", error.response?.data || error.message);
     return {

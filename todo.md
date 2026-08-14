@@ -26,3 +26,10 @@
 - [x] Inspect current deposit success and error copy paths
 - [x] Replace misleading STK push failure wording with clear deposit initiation success feedback
 - [x] Add or update tests for the deposit initiation message and save a checkpoint
+
+## Phase 26: Accepted STK Push False-Failure Correction
+- [x] Trace PalPluss response semantics and the current false-failure branch
+- [x] Treat an accepted STK push as deposit initiated successfully in the user-facing flow
+- [x] Preserve genuine validation and transport failures as errors
+- [x] Add regression tests for provider response mismatch and deposit success messaging
+- [x] Run tests, build, verify the result, and save a checkpoint
