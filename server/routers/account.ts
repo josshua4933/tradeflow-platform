@@ -24,6 +24,7 @@ import {
 } from "../db";
 import { wallets } from "../../drizzle/schema";
 import { and, eq } from "drizzle-orm";
+import { createWithdrawalRequest } from "../walletLedger";
 
 import { createRequire } from "module";
 const _require = createRequire(import.meta.url);
@@ -287,15 +288,13 @@ export const accountRouter = router({
       }
 
       const reference = `WD-${nanoid(10).toUpperCase()}`;
-      await createTransaction({
+      await createWithdrawalRequest({
         userId: ctx.user.id,
         walletId: wallet.id,
-        type: "withdrawal",
-        amount: input.amount.toFixed(2),
+        amount: input.amount,
         currency: wallet.currency,
-        status: "pending",
         reference,
-        description: `Withdrawal request`,
+        description: "Withdrawal request",
       });
 
       await logAudit({
@@ -419,23 +418,16 @@ export const accountRouter = router({
 
       try {
         const reference = `WD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-        
-        // Create withdrawal transaction
-        await createTransaction({
+
+        await createWithdrawalRequest({
           userId: ctx.user.id,
           walletId: input.walletId,
-          type: "withdrawal",
-          amount: input.amount.toString(),
+          amount: input.amount,
           currency: wallet[0].currency,
-          status: "pending",
           reference,
-          metadata: {
-            phoneNumber: input.phoneNumber,
-          },
+          metadata: { phoneNumber: input.phoneNumber },
+          description: "Withdrawal request",
         });
-
-        // Deduct from wallet
-        await updateWalletBalance(input.walletId, (walletBalance - input.amount).toString());
 
         // Log audit
         await logAudit({

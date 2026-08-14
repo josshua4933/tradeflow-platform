@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import { createTransaction, updateWalletBalance, getWalletsByUserId, createNotification } from "./db";
+import { createNotification } from "./db";
+import { settleDeposit, settleWithdrawalFailure, settleWithdrawalSuccess } from "./walletLedger";
 import { verifyPalPlussWebhook } from "./payplus";
 import { getDb } from "./db";
 import { transactions } from "../drizzle/schema";
@@ -41,18 +42,9 @@ export async function handlePalPlusWebhook(req: Request, res: Response) {
         return res.status(400).json({ error: "Missing userId" });
       }
 
-      // Update transaction status to completed
-      await updateTransactionStatus(transactionId, "completed");
+      await settleDeposit({ reference: transactionId, amount, currency, userId });
 
-      // Get user's wallet
-      const wallets = await getWalletsByUserId(userId);
-      const wallet = wallets.find((w) => w.currency === currency) || wallets[0];
-
-      if (wallet) {
-        // Update wallet balance
-        const newBalance = parseFloat(wallet.balance) + amount;
-        await updateWalletBalance(wallet.id, newBalance.toFixed(2), newBalance.toFixed(2), wallet.margin);
-
+      {
         // Send notification
         await createNotification({
           userId,
@@ -77,8 +69,7 @@ export async function handlePalPlusWebhook(req: Request, res: Response) {
         return res.status(400).json({ error: "Missing userId" });
       }
 
-      // Update transaction status to completed
-      await updateTransactionStatus(payoutId, "completed");
+      await settleWithdrawalSuccess(payoutId);
 
       // Send notification
       await createNotification({
@@ -103,17 +94,7 @@ export async function handlePalPlusWebhook(req: Request, res: Response) {
         return res.status(400).json({ error: "Missing userId" });
       }
 
-      // Update transaction status to failed
-      await updateTransactionStatus(payoutId, "failed");
-
-      // Refund wallet (add amount back)
-      const wallets = await getWalletsByUserId(userId);
-      const wallet = wallets.find((w) => w.currency === currency) || wallets[0];
-
-      if (wallet) {
-        const newBalance = parseFloat(wallet.balance) + amount;
-        await updateWalletBalance(wallet.id, newBalance.toFixed(2), newBalance.toFixed(2), wallet.margin);
-      }
+      await settleWithdrawalFailure(payoutId, reason);
 
       // Send notification
       await createNotification({

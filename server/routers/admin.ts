@@ -2,9 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getDb, getWalletsByUserId, updateWalletBalance, createNotification } from "../db";
-import { users, transactions, trades, kycDocuments, auditLog } from "../../drizzle/schema";
+import { users, transactions, trades, kycDocuments, auditLog, wallets } from "../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { createPalPlussWithdrawal } from "../payplus";
+import { createAdminBalanceAdjustment, reconcileWalletToTarget, reserveExistingWithdrawal, settleDeposit, settleWithdrawalFailure } from "../walletLedger";
 
 
 const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
@@ -36,6 +37,14 @@ export const adminRouter = router({
         .offset(input?.offset ?? 0);
 
       return allUsers;
+    }),
+
+  getUserWallets: adminProcedure
+    .input(z.object({ userId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      return db.select().from(wallets).where(eq(wallets.userId, input.userId));
     }),
 
   getUserDetails: adminProcedure
@@ -107,19 +116,11 @@ export const adminRouter = router({
 
       const txn = deposit[0];
 
-      // Update transaction status
-      await db
-        .update(transactions)
-        .set({ status: "completed" })
-        .where(eq(transactions.id, input.transactionId));
-
-      // Credit the wallet
-      const wallets = await getWalletsByUserId(txn.userId);
-      const wallet = wallets.find((w) => w.currency === txn.currency) || wallets[0];
-
-      if (wallet) {
-        const newBalance = parseFloat(wallet.balance) + parseFloat(txn.amount);
-        await updateWalletBalance(wallet.id, newBalance.toFixed(2), newBalance.toFixed(2), wallet.margin);
+      if (!txn.reference) throw new TRPCError({ code: "BAD_REQUEST", message: "Deposit is missing a settlement reference" });
+      try {
+        await settleDeposit({ reference: txn.reference, userId: txn.userId, amount: txn.amount, currency: txn.currency });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to settle deposit" });
       }
 
       // Send notification
@@ -175,6 +176,12 @@ export const adminRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Can only approve withdrawal transactions" });
       }
 
+      try {
+        await reserveExistingWithdrawal(input.transactionId);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to reserve withdrawal" });
+      }
+
       // Update transaction status to processing
       await db
         .update(transactions)
@@ -215,6 +222,11 @@ export const adminRouter = router({
         });
       } catch (error) {
         console.error("[Admin] Error initiating payout:", error);
+        try {
+          await settleWithdrawalFailure(input.transactionId, error instanceof Error ? error.message : "Payout initiation failed");
+        } catch (refundError) {
+          console.error("[Admin] Failed to release reserved withdrawal balance:", refundError);
+        }
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to initiate payout" });
       }
 
@@ -248,13 +260,11 @@ export const adminRouter = router({
         .set({ status: "cancelled" })
         .where(eq(transactions.id, input.transactionId));
 
-      // If it was a withdrawal, refund the wallet
       if (transaction.type === "withdrawal") {
-        const wallets = await getWalletsByUserId(transaction.userId);
-        const wallet = wallets.find((w) => w.currency === transaction.currency) || wallets[0];
-        if (wallet) {
-          const newBalance = parseFloat(wallet.balance) + parseFloat(transaction.amount);
-          await updateWalletBalance(wallet.id, newBalance.toFixed(2), newBalance.toFixed(2), wallet.margin);
+        try {
+          await settleWithdrawalFailure(input.transactionId, input.reason);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to refund withdrawal" });
         }
       }
 
@@ -434,6 +444,63 @@ export const adminRouter = router({
         createdAt: new Date(),
       });
       return { success: true, notificationsSent: allUsers.length };
+    }),
+
+  reconcileUserBalance: adminProcedure
+    .input(z.object({
+      userId: z.number().int().positive(),
+      walletId: z.number().int().positive(),
+      currency: z.string().min(3).max(8),
+      targetBalance: z.number().finite().min(0),
+      reason: z.string().trim().min(3).max(500),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await reconcileWalletToTarget({ ...input, adminUserId: ctx.user.id });
+        if (!result.alreadyReconciled) {
+          await createNotification({
+            userId: input.userId,
+            type: "system",
+            title: "Account balance reconciled",
+            message: `An administrator reconciled your ${input.currency} balance to ${input.targetBalance.toFixed(2)}. Reason: ${input.reason}`,
+            metadata: { reference: "reference" in result ? result.reference : undefined, targetBalance: input.targetBalance, currency: input.currency },
+          });
+        }
+        return { success: true, ...result };
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to reconcile balance" });
+      }
+    }),
+
+  adjustUserBalance: adminProcedure
+    .input(z.object({
+      userId: z.number().int().positive(),
+      walletId: z.number().int().positive(),
+      currency: z.string().min(3).max(8),
+      delta: z.number().finite().refine((value) => value !== 0, "Adjustment cannot be zero"),
+      reason: z.string().trim().min(3).max(500),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await createAdminBalanceAdjustment({
+          adminUserId: ctx.user.id,
+          userId: input.userId,
+          walletId: input.walletId,
+          currency: input.currency,
+          delta: input.delta,
+          reason: input.reason,
+        });
+        await createNotification({
+          userId: input.userId,
+          type: "system",
+          title: "Account balance adjusted",
+          message: `An administrator adjusted your ${input.currency} balance by ${input.delta.toFixed(2)}. Reason: ${input.reason}`,
+          metadata: { reference: result.reference, delta: input.delta, currency: input.currency },
+        });
+        return { success: true, ...result };
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to adjust balance" });
+      }
     }),
 
   // ─── Audit Log Viewer ──────────────────────────────────────────────────

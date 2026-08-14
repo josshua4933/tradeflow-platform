@@ -173,3 +173,16 @@
 - [x] Render active drawings as SVG overlays or Lightweight Charts price lines with selection, delete, and clear-all controls
 - [x] Add unit coverage for coordinate mapping, drawing creation, and deletion state management
 - [x] Run test suite, rebuild, and save checkpoint
+
+## Phase 21: Ledger-Consistent Wallet Balances (Deposits, Withdrawals, Admin Edits)
+- [x] Audit server/routers/admin.ts, server/routers/account.ts, and server/db.ts for balance update discrepancies
+- [x] Implement a unified ledger update helper for deposits, withdrawals, and admin balance edits
+- [x] Ensure admin edits create corresponding audit ledger transactions and update both wallet balance and equity atomically
+- [x] Add regression tests for balance consistency across deposits, withdrawals, and admin edits
+- [x] Run test suite, rebuild, and save checkpoint
+- [x] Add an explicit legacy-balance reconciliation action that creates a documented ledger adjustment instead of silently changing wallet rows
+- [x] Add end-to-end regression coverage for deposit settlement, withdrawal reservation/refund/completion, and admin balance adjustment audit records
+- [x] Verify legacy wallet data separately and do not alter existing balances without a documented reconciliation target
+- [x] Add explicit regression coverage for successful withdrawal completion so reserved funds are not refunded and completion is idempotent
+- [x] Exercise the account/admin settlement contracts at their route boundary or document the adapter-level integration coverage
+- [x] Document adapter-level ledger coverage and enumerate the account, admin, and webhook paths that delegate to it

@@ -4,10 +4,13 @@ import {
   createTransaction,
   createNotification,
   getWalletsByUserId,
-  updateWalletBalance,
   logAudit,
   getUserByOpenId,
+  getDb,
 } from "./db";
+import { transactions } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
+import { settleDeposit } from "./walletLedger";
 
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -81,21 +84,21 @@ export function registerStripeWebhook(app: Express) {
                 : wallets.find((w) => w.isDefault) ?? wallets[0];
 
               if (wallet) {
-                // Record transaction
-                await createTransaction({
-                  userId,
-                  walletId: wallet.id,
-                  type: "deposit",
-                  amount: amount.toFixed(2),
-                  currency,
-                  status: "completed",
-                  reference,
-                  description: `Stripe deposit via checkout`,
-                });
-
-                // Update wallet balance
-                const newBalance = parseFloat(wallet.balance) + amount;
-                await updateWalletBalance(wallet.id, newBalance.toFixed(2), newBalance.toFixed(2), wallet.margin);
+                const db = await getDb();
+                const existing = db ? await db.select().from(transactions).where(eq(transactions.reference, reference)).limit(1) : [];
+                if (!existing.length) {
+                  await createTransaction({
+                    userId,
+                    walletId: wallet.id,
+                    type: "deposit",
+                    amount: amount.toFixed(2),
+                    currency,
+                    status: "pending",
+                    reference,
+                    description: `Stripe deposit via checkout`,
+                  });
+                }
+                await settleDeposit({ reference, userId, amount, currency });
 
                 // Send notification
                 await createNotification({
