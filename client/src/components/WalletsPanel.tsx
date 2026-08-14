@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { buildDepositSuccessNotice, canStartAction, getDepositStatusPath, getIndependentActionBusyState } from "./walletAction.helpers";
+import { buildDepositSuccessNotice, canStartAction, getDepositButtonLabel, getDepositStatusPath, getIndependentActionBusyState } from "./walletAction.helpers";
 
 const SUPPORTED_CURRENCIES = [
   { code: "USD", name: "US Dollar", rate: 1 },
@@ -110,8 +110,8 @@ export default function WalletsPanel() {
         setPhoneNumber("");
       }
     } catch (error: any) {
-      setDepositNotice({ type: "error", message: error?.message || "The deposit could not be initiated. Please try again." });
-      toast.error("Deposit could not be initiated");
+      setDepositNotice({ type: "error", message: error?.message || "The deposit request could not be completed. Please try again." });
+      toast.error("Deposit request could not be completed");
     } finally {
       setActiveWalletAction(null);
     }
@@ -259,7 +259,7 @@ export default function WalletsPanel() {
               type="number"
               placeholder="Enter amount"
               value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
+              onChange={(e) => { setDepositAmount(e.target.value); setDepositNotice(null); }}
               min="10"
               max="100000"
               disabled={isDepositing || Boolean(activeWalletAction && activeWalletAction !== "deposit")}
@@ -279,7 +279,7 @@ export default function WalletsPanel() {
               type="tel"
               placeholder="Enter your phone number"
               value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
+              onChange={(e) => { setPhoneNumber(e.target.value); setDepositNotice(null); }}
               disabled={isDepositing || Boolean(activeWalletAction && activeWalletAction !== "deposit")}
             />
             <p className="text-xs text-muted-foreground mt-1">STK push will be sent to this number</p>
@@ -290,14 +290,8 @@ export default function WalletsPanel() {
             disabled={!selectedWallet || !depositAmount || !phoneNumber || Boolean(activeWalletAction)}
             className="w-full"
           >
-            {isDepositing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending STK Push...
-              </>
-            ) : (
-              "Send STK Push"
-            )}
+              {isDepositing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {getDepositButtonLabel(depositNotice, isDepositing)}
           </Button>
         </CardContent>
       </Card>

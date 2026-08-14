@@ -3,6 +3,7 @@ import {
   buildDepositSuccessNotice,
   canStartAction,
   getDepositStatusPath,
+  getDepositButtonLabel,
   getIndependentActionBusyState,
 } from "../client/src/components/walletAction.helpers";
 
@@ -33,6 +34,9 @@ describe("deposit success feedback", () => {
     expect(notice.type).toBe("success");
     expect(notice.message).toContain("Deposit request sent successfully");
     expect(notice.message).toContain("1300 KSH");
+    expect(notice.message).not.toContain("Failed to send STK push");
+    expect(getDepositButtonLabel(notice, false)).toBe("Deposit initiated successfully");
+    expect(getDepositButtonLabel(notice, true)).toBe("Sending STK Push...");
     expect(getDepositStatusPath(notice)).toBe(
       "/deposit-confirmation?txnId=TF-DEP-1-ABC12345&amount=10&currency=USD&phone=0710852136",
     );

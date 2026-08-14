@@ -48,3 +48,9 @@ export function getIndependentActionBusyState(activeAction: ActionKind | null) {
 export function canStartAction(activeAction: ActionKind | null) {
   return activeAction === null;
 }
+
+export function getDepositButtonLabel(notice: { type: "success" | "error" } | null, isDepositing: boolean) {
+  if (isDepositing) return "Sending STK Push...";
+  if (notice?.type === "success") return "Deposit initiated successfully";
+  return "Send STK Push";
+}

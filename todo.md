@@ -21,3 +21,8 @@
 - [x] Harden deposit, withdrawal, BUY, and SELL loading cleanup so only the active action spins
 - [x] Add regression tests for deposit success feedback, error handling, and spinner isolation
 - [x] Run tests, build, verify wallet behavior, and save a checkpoint
+
+## Phase 25: Deposit Initiation Copy Correction
+- [x] Inspect current deposit success and error copy paths
+- [x] Replace misleading STK push failure wording with clear deposit initiation success feedback
+- [x] Add or update tests for the deposit initiation message and save a checkpoint
