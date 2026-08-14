@@ -6,6 +6,7 @@ import { users, transactions, trades, kycDocuments, auditLog, wallets } from "..
 import { eq, desc, and } from "drizzle-orm";
 import { createPalPlussWithdrawal } from "../payplus";
 import { createAdminBalanceAdjustment, reconcileWalletToTarget, reserveExistingWithdrawal, settleDeposit, settleWithdrawalFailure } from "../walletLedger";
+import { aggregateWalletReconciliation } from "../walletReconciliation";
 
 
 const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
@@ -38,6 +39,17 @@ export const adminRouter = router({
 
       return allUsers;
     }),
+
+  getWalletReconciliationReport: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const [walletRows, userRows, transactionRows] = await Promise.all([
+      db.select().from(wallets),
+      db.select().from(users),
+      db.select().from(transactions),
+    ]);
+    return aggregateWalletReconciliation(walletRows, userRows, transactionRows);
+  }),
 
   getUserWallets: adminProcedure
     .input(z.object({ userId: z.number() }))
