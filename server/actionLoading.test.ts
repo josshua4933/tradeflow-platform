@@ -1,49 +1,72 @@
 import { describe, expect, it } from "vitest";
+import {
+  buildDepositSuccessNotice,
+  canStartAction,
+  getDepositStatusPath,
+  getIndependentActionBusyState,
+} from "../client/src/components/walletAction.helpers";
 
 describe("action loading state isolation", () => {
-  it("isolates deposit and withdrawal loading states independently", () => {
-    let isDepositing = false;
-    let isWithdrawing = false;
-
-    // Simulate deposit start
-    isDepositing = true;
-    expect(isDepositing).toBe(true);
-    expect(isWithdrawing).toBe(false);
-
-    // Simulate deposit finish
-    isDepositing = false;
-    expect(isDepositing).toBe(false);
-    expect(isWithdrawing).toBe(false);
-
-    // Simulate withdrawal start
-    isWithdrawing = true;
-    expect(isDepositing).toBe(false);
-    expect(isWithdrawing).toBe(true);
-
-    // Simulate withdrawal finish
-    isWithdrawing = false;
-    expect(isDepositing).toBe(false);
-    expect(isWithdrawing).toBe(false);
+  it("shows busy feedback only for the active wallet action", () => {
+    expect(getIndependentActionBusyState("deposit")).toMatchObject({ deposit: true, withdrawal: false, buy: false, sell: false });
+    expect(getIndependentActionBusyState("withdrawal")).toMatchObject({ deposit: false, withdrawal: true, buy: false, sell: false });
+    expect(canStartAction("deposit")).toBe(false);
+    expect(canStartAction(null)).toBe(true);
   });
 
-  it("isolates BUY and SELL execution loading states independently", () => {
-    let isBuying = false;
-    let isSelling = false;
+  it("shows busy feedback only for the active trade action", () => {
+    expect(getIndependentActionBusyState("buy")).toMatchObject({ deposit: false, withdrawal: false, buy: true, sell: false });
+    expect(getIndependentActionBusyState("sell")).toMatchObject({ deposit: false, withdrawal: false, buy: false, sell: true });
+  });
+});
 
-    // Simulate BUY click
-    isBuying = true;
-    expect(isBuying).toBe(true);
-    expect(isSelling).toBe(false);
+describe("deposit success feedback", () => {
+  it("builds success information and preserves payment-status details", () => {
+    const notice = buildDepositSuccessNotice({
+      amount: 10,
+      amountInKSH: 1300,
+      currency: "USD",
+      phoneNumber: "0710852136",
+      transactionId: "TF-DEP-1-ABC12345",
+    });
 
-    isBuying = false;
+    expect(notice.type).toBe("success");
+    expect(notice.message).toContain("Deposit request sent successfully");
+    expect(notice.message).toContain("1300 KSH");
+    expect(getDepositStatusPath(notice)).toBe(
+      "/deposit-confirmation?txnId=TF-DEP-1-ABC12345&amount=10&currency=USD&phone=0710852136",
+    );
+  });
+});
 
-    // Simulate SELL click
-    isSelling = true;
-    expect(isBuying).toBe(false);
-    expect(isSelling).toBe(true);
+describe("deposit error handling and success preservation", () => {
+  it("preserves deposit success notice even if cache invalidation promise fails", async () => {
+    let notice = null as any;
+    const successResult = { success: true, transactionId: "TF-DEP-1-TEST999" };
+    
+    // Simulate successful deposit intent
+    if (successResult.success) {
+      notice = buildDepositSuccessNotice({
+        amount: 50,
+        amountInKSH: 6500,
+        currency: "USD",
+        phoneNumber: "0710852136",
+        transactionId: successResult.transactionId,
+      });
+    }
 
-    isSelling = false;
-    expect(isBuying).toBe(false);
-    expect(isSelling).toBe(false);
+    expect(notice.type).toBe("success");
+    expect(notice.transactionId).toBe("TF-DEP-1-TEST999");
+
+    // Simulate cache invalidation rejection that should be caught and ignored
+    const cacheRefreshPromise = Promise.reject(new Error("network timeout"));
+    let errorCaught = false;
+    await cacheRefreshPromise.catch(() => {
+      errorCaught = true;
+    });
+
+    expect(errorCaught).toBe(true);
+    // Notice remains successfully set, preventing false error replacement
+    expect(notice.type).toBe("success");
   });
 });

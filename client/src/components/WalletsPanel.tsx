@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { buildDepositSuccessNotice, canStartAction, getDepositStatusPath, getIndependentActionBusyState } from "./walletAction.helpers";
 
 const SUPPORTED_CURRENCIES = [
   { code: "USD", name: "US Dollar", rate: 1 },
@@ -25,8 +26,9 @@ export default function WalletsPanel() {
   const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState("USD");
   
-  const [isDepositing, setIsDepositing] = useState(false);
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [activeWalletAction, setActiveWalletAction] = useState<"deposit" | "withdrawal" | null>(null);
+  const { deposit: isDepositing, withdrawal: isWithdrawing } = getIndependentActionBusyState(activeWalletAction);
+  const [depositNotice, setDepositNotice] = useState<ReturnType<typeof buildDepositSuccessNotice> | { type: "error"; message: string } | null>(null);
 
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
   const [withdrawalPhone, setWithdrawalPhone] = useState("");
@@ -36,6 +38,7 @@ export default function WalletsPanel() {
   const depositMutation = trpc.account.createDepositIntent.useMutation();
   const withdrawalMutation = trpc.account.createWithdrawal.useMutation();
   const transactionsMutation = trpc.account.transactions.useQuery({ limit: 50 });
+  const utils = trpc.useUtils();
 
   const KSH_RATE = 130;
   const currencyData = SUPPORTED_CURRENCIES.find((c) => c.code === selectedCurrency);
@@ -48,7 +51,8 @@ export default function WalletsPanel() {
       return;
     }
 
-    setIsWithdrawing(true);
+    if (!canStartAction(activeWalletAction)) return;
+    setActiveWalletAction("withdrawal");
     try {
       const result = await withdrawalMutation.mutateAsync({
         amount: parseFloat(withdrawalAmount),
@@ -65,7 +69,7 @@ export default function WalletsPanel() {
     } catch (error: any) {
       toast.error("Failed to process withdrawal. Please try again.");
     } finally {
-      setIsWithdrawing(false);
+      setActiveWalletAction(null);
     }
   };
 
@@ -75,7 +79,9 @@ export default function WalletsPanel() {
       return;
     }
 
-    setIsDepositing(true);
+    if (!canStartAction(activeWalletAction)) return;
+    setDepositNotice(null);
+    setActiveWalletAction("deposit");
     try {
       const result = await depositMutation.mutateAsync({
         amount: parseFloat(depositAmount),
@@ -86,17 +92,28 @@ export default function WalletsPanel() {
       });
 
       if (result.success) {
-        toast.success(`STK push sent for ${amountInKSH} KSH! Check your phone.`);
-        setTimeout(() => {
-          setLocation(`/deposit-confirmation?txnId=${result.transactionId}&amount=${depositAmount}&currency=USD&phone=${phoneNumber}`);
-        }, 500);
+        setDepositNotice(buildDepositSuccessNotice({
+          amount: parseFloat(depositAmount),
+          amountInKSH,
+          currency: selectedCurrency,
+          phoneNumber,
+          transactionId: result.transactionId,
+        }));
+        toast.success("Deposit initiated successfully", { description: `Complete the ${amountInKSH} KSH payment on your phone.` });
+        void Promise.all([
+          utils.account.transactions.invalidate(),
+          utils.account.wallets.invalidate(),
+        ]).catch(() => {
+          // The deposit request already succeeded; a cache refresh failure must not replace success feedback with an error.
+        });
         setDepositAmount("");
         setPhoneNumber("");
       }
     } catch (error: any) {
-      toast.error("Failed to send STK push. Please try again.");
+      setDepositNotice({ type: "error", message: error?.message || "The deposit could not be initiated. Please try again." });
+      toast.error("Deposit could not be initiated");
     } finally {
-      setIsDepositing(false);
+      setActiveWalletAction(null);
     }
   };
 
@@ -154,7 +171,7 @@ export default function WalletsPanel() {
               id="withdrawal-wallet"
               value={selectedWithdrawalWallet || ""}
               onChange={(e) => setSelectedWithdrawalWallet(e.target.value ? parseInt(e.target.value) : null)}
-              disabled={isWithdrawing}
+              disabled={isWithdrawing || Boolean(activeWalletAction && activeWalletAction !== "withdrawal")}
               className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
             >
               <option value="">Choose a wallet...</option>
@@ -176,7 +193,7 @@ export default function WalletsPanel() {
               onChange={(e) => setWithdrawalAmount(e.target.value)}
               min="1"
               max="100000"
-              disabled={isWithdrawing}
+              disabled={isWithdrawing || Boolean(activeWalletAction && activeWalletAction !== "withdrawal")}
             />
             <p className="text-xs text-muted-foreground mt-1">Minimum: $1 | Maximum: $100,000</p>
           </div>
@@ -189,14 +206,14 @@ export default function WalletsPanel() {
               placeholder="Enter your phone number"
               value={withdrawalPhone}
               onChange={(e) => setWithdrawalPhone(e.target.value)}
-              disabled={isWithdrawing}
+              disabled={isWithdrawing || Boolean(activeWalletAction && activeWalletAction !== "withdrawal")}
             />
             <p className="text-xs text-muted-foreground mt-1">Confirmation will be sent to this number</p>
           </div>
 
           <Button
             onClick={handleWithdrawal}
-            disabled={!selectedWithdrawalWallet || !withdrawalAmount || !withdrawalPhone || isWithdrawing}
+            disabled={!selectedWithdrawalWallet || !withdrawalAmount || !withdrawalPhone || Boolean(activeWalletAction)}
             className="w-full"
           >
             {isWithdrawing ? (
@@ -224,7 +241,7 @@ export default function WalletsPanel() {
               id="currency"
               value={selectedCurrency}
               onChange={(e) => setSelectedCurrency(e.target.value)}
-              disabled={isDepositing}
+              disabled={isDepositing || Boolean(activeWalletAction && activeWalletAction !== "deposit")}
               className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
             >
               {SUPPORTED_CURRENCIES.map((curr) => (
@@ -245,7 +262,7 @@ export default function WalletsPanel() {
               onChange={(e) => setDepositAmount(e.target.value)}
               min="10"
               max="100000"
-              disabled={isDepositing}
+              disabled={isDepositing || Boolean(activeWalletAction && activeWalletAction !== "deposit")}
             />
             <p className="text-xs text-muted-foreground mt-1">Minimum: 10 {selectedCurrency} | Maximum: 100,000 {selectedCurrency}</p>
             {depositAmount && (
@@ -263,14 +280,14 @@ export default function WalletsPanel() {
               placeholder="Enter your phone number"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
-              disabled={isDepositing}
+              disabled={isDepositing || Boolean(activeWalletAction && activeWalletAction !== "deposit")}
             />
             <p className="text-xs text-muted-foreground mt-1">STK push will be sent to this number</p>
           </div>
 
           <Button
             onClick={handleDeposit}
-            disabled={!selectedWallet || !depositAmount || !phoneNumber || isDepositing}
+            disabled={!selectedWallet || !depositAmount || !phoneNumber || Boolean(activeWalletAction)}
             className="w-full"
           >
             {isDepositing ? (
@@ -284,6 +301,28 @@ export default function WalletsPanel() {
           </Button>
         </CardContent>
       </Card>
+
+      {depositNotice && (
+        <Card className={depositNotice.type === "success" ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"} role="status" aria-live="polite">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className={`font-semibold ${depositNotice.type === "success" ? "text-green-800" : "text-red-800"}`}>
+                {depositNotice.type === "success" ? "Deposit request successful" : "Deposit request not completed"}
+              </p>
+              <p className={`mt-1 text-sm ${depositNotice.type === "success" ? "text-green-700" : "text-red-700"}`}>{depositNotice.message}</p>
+            </div>
+            {depositNotice.type === "success" && depositNotice.transactionId && (
+              <Button
+                variant="outline"
+                className="shrink-0 border-green-400 bg-white text-green-800 hover:bg-green-100"
+                onClick={() => setLocation(getDepositStatusPath(depositNotice))}
+              >
+                View payment status
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Transaction History */}
       <Card>

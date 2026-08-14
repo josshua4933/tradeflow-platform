@@ -40,6 +40,7 @@ import { createChart, ColorType, CrosshairMode, HistogramSeries, LineSeries, Lin
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { normalizeHistoricalCandles, LiveCandleGuard } from "./chartNormalization";
 import { filterTerminalSymbols, formatMoney, formatPrice, getQuoteSides } from "./tradingTerminal.helpers";
+import { canStartAction, getIndependentActionBusyState } from "./walletAction.helpers";
 
 type ChartMode = "candles" | "line";
 type OrderMode = "market" | "limit" | "stop" | "risk";
@@ -322,8 +323,8 @@ function OrderPanel({ symbol, price, bid, ask }: { symbol: string; price: number
     stopLossPips: stopLoss ? Math.abs((price - Number(stopLoss)) / 0.0001) : undefined,
   }, { enabled: canTrade && price > 0 });
 
-  const [isBuying, setIsBuying] = useState(false);
-  const [isSelling, setIsSelling] = useState(false);
+  const [activeTradeAction, setActiveTradeAction] = useState<"buy" | "sell" | null>(null);
+  const { buy: isBuying, sell: isSelling } = getIndependentActionBusyState(activeTradeAction);
 
   const placeTrade = trpc.trading.placeTrade.useMutation({
     onSuccess: (data) => {
@@ -356,14 +357,13 @@ function OrderPanel({ symbol, price, bid, ask }: { symbol: string; price: number
     if (numericStopLoss !== undefined && !Number.isFinite(numericStopLoss)) return toast.error("Stop loss must be a valid price");
     if (numericTakeProfit !== undefined && !Number.isFinite(numericTakeProfit)) return toast.error("Take profit must be a valid price");
 
-    if (type === "buy") setIsBuying(true);
-    else setIsSelling(true);
+    if (!canStartAction(activeTradeAction)) return;
+    setActiveTradeAction(type);
 
     try {
       await placeTrade.mutateAsync({ symbol, type, lotSize: numericLotSize, leverage: numericLeverage, stopLoss: numericStopLoss, takeProfit: numericTakeProfit });
     } finally {
-      if (type === "buy") setIsBuying(false);
-      else setIsSelling(false);
+      setActiveTradeAction(null);
     }
   };
 
@@ -419,11 +419,11 @@ function OrderPanel({ symbol, price, bid, ask }: { symbol: string; price: number
           {!canTrade && !instrumentLoading && <div className="rounded border border-[#6b2c32] bg-[#281316] p-2 text-[11px] text-[#ff8b91]" role="alert">This symbol has no active execution instrument.</div>}
 
           <div className="mt-auto grid grid-cols-2 gap-2">
-            <Button onClick={() => handleTrade("sell")} disabled={isSelling || isBuying || !canTrade || bid <= 0 || orderMode !== "market"} aria-busy={isSelling} className="h-11 bg-[#b83c46] text-white hover:bg-[#c84a54] disabled:opacity-50">
+            <Button onClick={() => handleTrade("sell")} disabled={Boolean(activeTradeAction) || !canTrade || bid <= 0 || orderMode !== "market"} aria-busy={isSelling} className="h-11 bg-[#b83c46] text-white hover:bg-[#c84a54] disabled:opacity-50">
               {isSelling ? <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" /> : <TrendingDown className="mr-1.5 h-4 w-4" />}
               {isSelling ? "EXECUTING" : "SELL"}
             </Button>
-            <Button onClick={() => handleTrade("buy")} disabled={isSelling || isBuying || !canTrade || ask <= 0 || orderMode !== "market"} aria-busy={isBuying} className="h-11 bg-[#178f7e] text-white hover:bg-[#1da997] disabled:opacity-50">
+            <Button onClick={() => handleTrade("buy")} disabled={Boolean(activeTradeAction) || !canTrade || ask <= 0 || orderMode !== "market"} aria-busy={isBuying} className="h-11 bg-[#178f7e] text-white hover:bg-[#1da997] disabled:opacity-50">
               {isBuying ? <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" /> : <TrendingUp className="mr-1.5 h-4 w-4" />}
               {isBuying ? "EXECUTING" : "BUY"}
             </Button>

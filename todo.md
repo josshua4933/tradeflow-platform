@@ -14,3 +14,10 @@
 - [x] Separate BUY and SELL pending indicators so only the tapped side spins
 - [x] Add regression tests for action-specific loading isolation
 - [x] Run tests, build, verify the affected flows, and save a checkpoint
+
+## Phase 24: Deposit Success Feedback and Spinner Cleanup
+- [x] Trace deposit success/error handling and remaining shared spinner behavior
+- [x] Add clear in-page deposit success confirmation and remove misleading success-path error feedback
+- [x] Harden deposit, withdrawal, BUY, and SELL loading cleanup so only the active action spins
+- [x] Add regression tests for deposit success feedback, error handling, and spinner isolation
+- [x] Run tests, build, verify wallet behavior, and save a checkpoint
