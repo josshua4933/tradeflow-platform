@@ -23,6 +23,7 @@ import RiskDisclosurePage from "./pages/RiskDisclosurePage";
 import AmlPolicyPage from "./pages/AmlPolicyPage";
 import AuditPage from "./pages/AuditPage";
 import EducationPage from "./pages/EducationPage";
+import EducationLessonPage from "./pages/EducationLessonPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import DepositConfirmation from "./pages/DepositConfirmation";
 import ActivityDashboard from "./pages/ActivityDashboard";
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/terms" component={TermsPage} />
       <Route path="/risk-disclosure" component={RiskDisclosurePage} />
       <Route path="/aml-policy" component={AmlPolicyPage} />
+      <Route path="/education/:lessonId" component={EducationLessonPage} />
       <Route path="/education" component={EducationPage} />
 
       {/* Admin */}

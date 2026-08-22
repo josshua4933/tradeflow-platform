@@ -304,3 +304,22 @@ export const activeSessions = mysqlTable("active_sessions", {
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+// ─── Education Progress & Quizzes ─────────────────────────────────────────────
+export const userLessonProgress = mysqlTable("user_lesson_progress", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  lessonId: varchar("lessonId", { length: 128 }).notNull(),
+  isCompleted: boolean("isCompleted").default(true).notNull(),
+  completedAt: timestamp("completedAt").defaultNow().notNull(),
+});
+
+export const userQuizScores = mysqlTable("user_quiz_scores", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  lessonId: varchar("lessonId", { length: 128 }).notNull(),
+  score: int("score").notNull(),
+  totalQuestions: int("totalQuestions").notNull(),
+  passed: boolean("passed").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});

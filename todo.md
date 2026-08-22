@@ -40,3 +40,11 @@
 - [x] Build Calendar UI filters for day, currency, and impact with event times, actual/forecast/previous values, and source links
 - [x] Add regression tests for feed parsing, date filtering, and error/empty states
 - [x] Run tests, build, verify the Calendar page, and save a checkpoint
+
+## Phase 28: Interactive Education & Learning Center
+- [x] Define the education content model, lessons, and interactive quiz questions
+- [x] Add Drizzle schema tables for lesson progress and quiz results with safe migration
+- [x] Implement backend tRPC procedures for fetching curriculum, saving progress, and recording quiz scores
+- [x] Build interactive lesson reading view, completion toggles, quizzes with instant score feedback, and practical tool links
+- [x] Add regression tests for progress saving and quiz scoring
+- [ ] Run tests, build, verify education flows, and save a checkpoint

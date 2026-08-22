@@ -1,90 +1,71 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { ArrowLeft, BookOpen, Play, ChevronRight } from "lucide-react";
+import { useMemo } from "react";
+import { BookOpen, CheckCircle2, ChevronRight, Clock3, GraduationCap, Loader2, Target } from "lucide-react";
+import { Link } from "wouter";
+import TradingLayout from "@/components/TradingLayout";
+import { trpc } from "@/lib/trpc";
 
-const modules = [
-  {
-    category: "Fundamentals",
-    articles: [
-      { title: "Introduction to Forex Trading", duration: "10 min", level: "Beginner", desc: "Learn the basics of currency pairs, how forex markets work, and why traders participate in them." },
-      { title: "Understanding Leverage & Margin", duration: "12 min", level: "Beginner", desc: "A comprehensive guide to leverage, margin requirements, and how they affect your trading capital." },
-      { title: "Reading Candlestick Charts", duration: "15 min", level: "Beginner", desc: "Master the art of reading price action through candlestick patterns and chart analysis." },
-      { title: "Risk Management Essentials", duration: "20 min", level: "Intermediate", desc: "Learn position sizing, stop loss placement, and how to protect your trading capital." },
-    ],
-  },
-  {
-    category: "Technical Analysis",
-    articles: [
-      { title: "Support & Resistance Levels", duration: "18 min", level: "Intermediate", desc: "Identify key price levels where markets tend to reverse or consolidate." },
-      { title: "Moving Averages Explained", duration: "14 min", level: "Intermediate", desc: "How to use SMA, EMA, and MACD to identify trends and generate trading signals." },
-      { title: "RSI & Momentum Indicators", duration: "16 min", level: "Intermediate", desc: "Use the Relative Strength Index and other momentum indicators to time entries and exits." },
-      { title: "Fibonacci Retracements", duration: "20 min", level: "Advanced", desc: "Apply Fibonacci levels to identify potential reversal zones in trending markets." },
-    ],
-  },
-  {
-    category: "Advanced Topics",
-    articles: [
-      { title: "Trading Synthetic Indices", duration: "25 min", level: "Advanced", desc: "Understand AI-generated synthetic markets, their properties, and trading strategies." },
-      { title: "Binary & Digital Options", duration: "22 min", level: "Advanced", desc: "How binary options work, payout structures, and risk/reward considerations." },
-      { title: "Copy Trading Strategies", duration: "18 min", level: "Intermediate", desc: "How to evaluate traders to follow, risk allocation, and managing a copy portfolio." },
-      { title: "Economic Calendar Trading", duration: "20 min", level: "Advanced", desc: "Trading around high-impact economic events including NFP, CPI, and central bank decisions." },
-    ],
-  },
-];
-
-const levelColors: Record<string, string> = {
-  Beginner: "bg-bull/10 text-bull",
-  Intermediate: "bg-yellow-500/10 text-yellow-600",
-  Advanced: "bg-bear/10 text-bear",
-};
+const levelStyles = {
+  Beginner: "bg-emerald-50 text-emerald-700",
+  Intermediate: "bg-amber-50 text-amber-700",
+  Advanced: "bg-rose-50 text-rose-700",
+} as const;
 
 export default function EducationPanel() {
-  const [, navigate] = useLocation();
+  const { data, isLoading, isError } = trpc.education.curriculum.useQuery();
+  const lessons = data?.lessons ?? [];
+  const completedIds = new Set(data?.completedLessonIds ?? []);
+  const completedCount = completedIds.size;
+  const progressPercent = lessons.length ? Math.round((completedCount / lessons.length) * 100) : 0;
+  const groupedLessons = useMemo(() => {
+    const grouped = new Map<string, typeof lessons>();
+    lessons.forEach((lesson) => grouped.set(lesson.category, [...(grouped.get(lesson.category) ?? []), lesson]));
+    return Array.from(grouped.entries());
+  }, [lessons]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card px-6 py-4 flex items-center gap-4">
-        <button onClick={() => navigate("/dashboard")} className="text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <a href="/" className="font-serif text-lg font-bold">TradeFlow</a>
-      </header>
-
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        <div className="mb-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-px w-8 bg-foreground/30"></div>
-            <span className="text-xs tracking-[0.15em] uppercase text-muted-foreground">Learning Center</span>
-          </div>
-          <h1 className="font-serif text-4xl font-bold mb-2">Education</h1>
-          <p className="text-muted-foreground">Master trading with our comprehensive educational resources.</p>
-        </div>
-
-        <div className="space-y-8">
-          {modules.map((mod) => (
-            <div key={mod.category}>
-              <h2 className="font-serif text-xl font-bold mb-4">{mod.category}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {mod.articles.map((article) => (
-                  <div key={article.title} className="border border-border bg-card p-4 hover:border-foreground/30 transition-colors cursor-pointer group">
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <h3 className="font-semibold text-sm group-hover:underline">{article.title}</h3>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                    </div>
-                    <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{article.desc}</p>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${levelColors[article.level]}`}>{article.level}</span>
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <BookOpen className="h-3 w-3" /> {article.duration}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+    <TradingLayout>
+      <div className="min-h-full bg-[#f7f5f0] px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500"><span className="h-px w-7 bg-slate-400" />Learning center</div>
+              <h1 className="font-serif text-3xl font-bold tracking-tight sm:text-4xl">Education</h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">Learn the mechanics, risk controls, and market context behind every TradeFlow tool.</p>
             </div>
-          ))}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="border border-slate-200 bg-white px-3 py-3 shadow-sm"><div className="text-[10px] uppercase tracking-wider text-slate-500">Lessons</div><div className="mt-1 text-xl font-bold">{lessons.length}</div></div>
+              <div className="border border-slate-200 bg-white px-3 py-3 shadow-sm"><div className="text-[10px] uppercase tracking-wider text-slate-500">Completed</div><div className="mt-1 text-xl font-bold text-emerald-700">{completedCount}</div></div>
+              <div className="border border-slate-200 bg-white px-3 py-3 shadow-sm"><div className="text-[10px] uppercase tracking-wider text-slate-500">Progress</div><div className="mt-1 text-xl font-bold">{progressPercent}%</div></div>
+            </div>
+          </div>
+
+          <div className="mb-7 border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-semibold"><GraduationCap className="h-4 w-4 text-slate-500" />Your learning path</div><span className="text-xs text-slate-500">{completedCount} of {lessons.length} lessons complete</span></div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-900 transition-all" style={{ width: `${progressPercent}%` }} /></div>
+            <p className="mt-3 text-xs text-slate-500">Open a lesson to read the guide, practise in the relevant TradeFlow tool, and complete its knowledge check.</p>
+          </div>
+
+          {isLoading && <div className="flex min-h-56 items-center justify-center gap-2 border border-slate-200 bg-white text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading your curriculum…</div>}
+          {isError && <div className="border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-800">We could not load your education progress. Refresh the page and try again.</div>}
+
+          {!isLoading && !isError && <div className="space-y-8">
+            {groupedLessons.map(([category, categoryLessons]) => (
+              <section key={category}>
+                <div className="mb-3 flex items-end justify-between"><div><div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Module</div><h2 className="mt-1 font-serif text-2xl font-bold">{category}</h2></div><span className="text-xs text-slate-500">{categoryLessons.length} lessons</span></div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {categoryLessons.map((lesson) => {
+                    const isCompleted = completedIds.has(lesson.id);
+                    return <Link key={lesson.id} href={`/education/${lesson.id}`} className="group border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 sm:p-5">
+                      <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><div className="mt-0.5 rounded-lg bg-slate-100 p-2 text-slate-700"><BookOpen className="h-4 w-4" /></div><div className="min-w-0"><h3 className="font-semibold text-slate-900 group-hover:underline">{lesson.title}</h3><p className="mt-1 text-xs leading-5 text-slate-500">{lesson.description}</p></div></div>{isCompleted ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" /> : <ChevronRight className="h-5 w-5 shrink-0 text-slate-400 transition group-hover:translate-x-0.5" />}</div>
+                      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs"><span className={`rounded-full px-2 py-1 font-medium ${levelStyles[lesson.level]}`}>{lesson.level}</span><span className="inline-flex items-center gap-1 text-slate-500"><Clock3 className="h-3.5 w-3.5" />{lesson.durationMinutes} min</span><span className="inline-flex items-center gap-1 text-slate-500"><Target className="h-3.5 w-3.5" />{lesson.quiz.length} questions</span></div>
+                    </Link>;
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>}
         </div>
       </div>
-    </div>
+    </TradingLayout>
   );
 }

@@ -8,6 +8,8 @@ import {
   economicEvents,
   instruments,
   kycDocuments,
+  userLessonProgress,
+  userQuizScores,
   notifications,
   priceAlerts,
   referrals,
@@ -685,4 +687,58 @@ export async function saveAssistantMessage(data: {
   const db = await getDb();
   if (!db) return;
   await db.insert(assistantMessages).values(data);
+}
+
+// ─── Education Progress ─────────────────────────────────────────────────────────
+export async function getUserLessonProgress(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(userLessonProgress)
+    .where(eq(userLessonProgress.userId, userId))
+    .orderBy(desc(userLessonProgress.completedAt));
+}
+
+export async function setUserLessonProgress(userId: number, lessonId: string, isCompleted: boolean) {
+  const db = await getDb();
+  if (!db) return;
+
+  const existing = await db
+    .select()
+    .from(userLessonProgress)
+    .where(and(eq(userLessonProgress.userId, userId), eq(userLessonProgress.lessonId, lessonId)))
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(userLessonProgress)
+      .set({ isCompleted, completedAt: isCompleted ? new Date() : existing[0].completedAt })
+      .where(eq(userLessonProgress.id, existing[0].id));
+    return;
+  }
+
+  await db.insert(userLessonProgress).values({ userId, lessonId, isCompleted });
+}
+
+export async function getUserQuizScores(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(userQuizScores)
+    .where(eq(userQuizScores.userId, userId))
+    .orderBy(desc(userQuizScores.createdAt));
+}
+
+export async function saveUserQuizScore(data: {
+  userId: number;
+  lessonId: string;
+  score: number;
+  totalQuestions: number;
+  passed: boolean;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(userQuizScores).values(data);
 }

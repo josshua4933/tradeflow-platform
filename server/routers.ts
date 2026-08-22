@@ -9,6 +9,7 @@ import { notificationsRouter } from "./routers/notifications";
 import { socialRouter } from "./routers/social";
 import { tradingRouter } from "./routers/trading";
 import { adminRouter } from "./routers/admin";
+import { educationRouter } from "./routers/education";
 import { getAuditLog, getAssistantMessages } from "./db";
 
 export const appRouter = router({
@@ -30,6 +31,7 @@ export const appRouter = router({
   notifications: notificationsRouter,
   assistant: assistantRouter,
   admin: adminRouter,
+  education: educationRouter,
 
   // Audit log (admin + own)
   audit: router({
