@@ -4,6 +4,7 @@ import { getInstruments, getInstrumentBySymbol, getTradingSignals, getEconomicEv
 import { getCachedPrices } from "../binance";
 import { getBinanceKlines } from "../binanceKlines";
 import { getLatestBinancePrice } from "../binanceStream";
+import { getForexFactoryCalendar } from "../forexFactoryCalendar";
 
 // ─── Price Simulation Engine ──────────────────────────────────────────────────
 // Base prices for all instruments
@@ -141,6 +142,12 @@ export const marketRouter = router({
     .input(z.object({ days: z.number().min(1).max(30).default(7) }).optional())
     .query(async ({ input }) => {
       return getEconomicEvents(input?.days ?? 7);
+    }),
+
+  forexFactoryCalendar: publicProcedure
+    .input(z.object({ days: z.number().min(1).max(14).default(7) }).optional())
+    .query(async ({ input }) => {
+      return getForexFactoryCalendar(input?.days ?? 7);
     }),
 
   marketHours: publicProcedure.query(() => {

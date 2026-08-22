@@ -33,3 +33,10 @@
 - [x] Preserve genuine validation and transport failures as errors
 - [x] Add regression tests for provider response mismatch and deposit success messaging
 - [x] Run tests, build, verify the result, and save a checkpoint
+
+## Phase 27: Forex Factory Daily News Calendar
+- [x] Inspect the existing Calendar page, router conventions, and available parsing dependencies
+- [x] Add a server-side Forex Factory weekly-feed reader with normalized daily events and safe fallback states
+- [x] Build Calendar UI filters for day, currency, and impact with event times, actual/forecast/previous values, and source links
+- [x] Add regression tests for feed parsing, date filtering, and error/empty states
+- [x] Run tests, build, verify the Calendar page, and save a checkpoint
