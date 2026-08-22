@@ -42,6 +42,7 @@ import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { normalizeHistoricalCandles, LiveCandleGuard } from "./chartNormalization";
 import { filterTerminalSymbols, formatMoney, formatPrice, getQuoteSides } from "./tradingTerminal.helpers";
 import { canStartAction, getIndependentActionBusyState } from "./walletAction.helpers";
+import { calculateEma, calculateRsi, calculateSma, createIndicatorPreset, DEFAULT_INDICATOR_SETTINGS, loadIndicatorPresets, normalizeIndicatorSettings, saveIndicatorPresets, type IndicatorPreset, type IndicatorSettings } from "./indicatorPresets";
 
 type ChartMode = "candles" | "line";
 type OrderMode = "market" | "limit" | "stop" | "risk";
@@ -66,6 +67,7 @@ function PriceChart({
   drawings,
   onAddDrawing,
   selectedDrawingId,
+  indicatorSettings,
   onSelectDrawing,
 }: {
   symbol: string;
@@ -81,6 +83,7 @@ function PriceChart({
   drawings: DrawingItem[];
   onAddDrawing: (drawing: DrawingItem) => void;
   selectedDrawingId: string | null;
+  indicatorSettings: IndicatorSettings;
   onSelectDrawing: (id: string | null) => void;
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -90,10 +93,13 @@ function PriceChart({
   const volumeSeriesRef = useRef<any>(null);
   const emaSeriesRef = useRef<any>(null);
   const smaSeriesRef = useRef<any>(null);
+  const rsiSeriesRef = useRef<any>(null);
+  const indicatorDataRef = useRef<any[]>([]);
   const crosshairCallbackRef = useRef(onCrosshairChange);
   crosshairCallbackRef.current = onCrosshairChange;
   const drawingToolRef = useRef(drawingTool);
   drawingToolRef.current = drawingTool;
+  const pendingTrendlineRef = useRef<{ p1: { time: number; price: number } } | null>(null);
   const { candles: wsCandles, subscribeToCandles, getCandle } = useWebSocketContext();
   const liveCandle = getCandle(symbol, timeframe);
   const { data: candles, isLoading, isError } = trpc.market.candles.useQuery(
@@ -170,7 +176,16 @@ function PriceChart({
       lastValueVisible: false,
       visible: false,
     });
+    const rsiSeries = chart.addSeries(LineSeries, {
+      color: "#fb7185",
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: false,
+      priceScaleId: "rsi",
+    });
     chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    chart.priceScale("rsi").applyOptions({ scaleMargins: { top: 0.68, bottom: 0.08 }, borderColor: "#303744" });
 
     const handleCrosshairMove = (param: any) => {
       const point = param.seriesData?.get(candleSeries);
@@ -237,6 +252,7 @@ function PriceChart({
     volumeSeriesRef.current = volumeSeries;
     emaSeriesRef.current = emaSeries;
     smaSeriesRef.current = smaSeries;
+    rsiSeriesRef.current = rsiSeries;
 
     const handleResize = () => {
       const width = container.clientWidth;
@@ -261,6 +277,7 @@ function PriceChart({
       volumeSeriesRef.current = null;
       emaSeriesRef.current = null;
       smaSeriesRef.current = null;
+      rsiSeriesRef.current = null;
     };
   }, []);
 
@@ -269,8 +286,9 @@ function PriceChart({
     lineSeriesRef.current?.applyOptions({ visible: chartMode === "line" });
     emaSeriesRef.current?.applyOptions({ visible: showEma });
     smaSeriesRef.current?.applyOptions({ visible: showSma });
-    volumeSeriesRef.current?.applyOptions({ visible: showVolume });
-  }, [chartMode, showEma, showSma, showVolume]);
+    rsiSeriesRef.current?.applyOptions({ visible: indicatorSettings.showRsi });
+    volumeSeriesRef.current?.applyOptions({ visible: indicatorSettings.showVolume });
+  }, [chartMode, showEma, showSma, showVolume, indicatorSettings.showRsi, indicatorSettings.showVolume]);
 
   useEffect(() => {
     if (!candles?.length || !candleSeriesRef.current) return;
@@ -285,20 +303,16 @@ function PriceChart({
       color: c.close >= c.open ? "#26a69a55" : "#ef535055",
     })));
 
-    let ema = data[0].close;
-    const multiplier = 2 / (20 + 1);
-    emaSeriesRef.current?.setData(data.map((c: any) => {
-      ema = (c.close - ema) * multiplier + ema;
-      return { time: c.time, value: ema };
-    }));
-    const smaPeriod = 50;
-    smaSeriesRef.current?.setData(data.map((c: any, index: number) => {
-      const windowStart = Math.max(0, index - smaPeriod + 1);
-      const window = data.slice(windowStart, index + 1);
-      return { time: c.time, value: window.reduce((sum: number, item: any) => sum + item.close, 0) / window.length };
-    }));
+    const closes = data.map((c: any) => c.close);
+    const emaValues = calculateEma(closes, indicatorSettings.emaPeriod);
+    emaSeriesRef.current?.setData(data.map((c: any, index: number) => ({ time: c.time, value: emaValues[index] })));
+    const smaValues = calculateSma(closes, indicatorSettings.smaPeriod);
+    smaSeriesRef.current?.setData(data.map((c: any, index: number) => ({ time: c.time, value: smaValues[index] })));
+    const rsiValues = calculateRsi(closes, indicatorSettings.rsiPeriod);
+    rsiSeriesRef.current?.setData(data.map((c: any, index: number) => ({ time: c.time, value: rsiValues[index] })));
+    indicatorDataRef.current = data;
     chartInstance.current?.timeScale().fitContent();
-  }, [candles]);
+  }, [candles, indicatorSettings.emaPeriod, indicatorSettings.smaPeriod, indicatorSettings.rsiPeriod]);
 
   const liveGuardRef = useRef(new LiveCandleGuard());
 
@@ -322,10 +336,24 @@ function PriceChart({
         value: wsCandle.volume,
         color: wsCandle.close >= wsCandle.open ? "#26a69a55" : "#ef535055",
       });
+      const currentData = indicatorDataRef.current;
+      const nextCandle = { time: candleTime, open: wsCandle.open, high: wsCandle.high, low: wsCandle.low, close: wsCandle.close, volume: wsCandle.volume };
+      const nextData = currentData.length && currentData[currentData.length - 1].time === candleTime
+        ? [...currentData.slice(0, -1), nextCandle]
+        : [...currentData, nextCandle];
+      indicatorDataRef.current = nextData;
+      const closes = nextData.map((c) => Number(c.close));
+      const lastIndex = closes.length - 1;
+      const emaValues = calculateEma(closes, indicatorSettings.emaPeriod);
+      const smaValues = calculateSma(closes, indicatorSettings.smaPeriod);
+      const rsiValues = calculateRsi(closes, indicatorSettings.rsiPeriod);
+      emaSeriesRef.current?.update({ time: candleTime as any, value: emaValues[lastIndex] });
+      smaSeriesRef.current?.update({ time: candleTime as any, value: smaValues[lastIndex] });
+      rsiSeriesRef.current?.update({ time: candleTime as any, value: rsiValues[lastIndex] });
     } catch (error) {
       console.warn("[TradingTerminal] Chart update error suppressed:", error);
     }
-  }, [wsCandles, symbol, timeframe, getCandle]);
+  }, [wsCandles, symbol, timeframe, getCandle, indicatorSettings.emaPeriod, indicatorSettings.smaPeriod, indicatorSettings.rsiPeriod]);
 
   return (
     <div className="relative h-full min-h-[520px] w-full bg-[#0f1115]">
@@ -520,15 +548,22 @@ export function TradingTerminal() {
   const [selectedSymbol, setSelectedSymbol] = useState("BTCUSD");
   const [selectedTimeframe, setSelectedTimeframe] = useState<(typeof TIMEFRAMES)[number]>("1m");
   const [chartMode, setChartMode] = useState<ChartMode>("candles");
-  const [showEma, setShowEma] = useState(false);
-  const [showSma, setShowSma] = useState(false);
-  const [showVolume, setShowVolume] = useState(true);
+  const [indicatorSettings, setIndicatorSettings] = useState<IndicatorSettings>(DEFAULT_INDICATOR_SETTINGS);
+  const [indicatorPresets, setIndicatorPresets] = useState<IndicatorPreset[]>([]);
+  const [presetName, setPresetName] = useState("");
   const [indicatorsOpen, setIndicatorsOpen] = useState(false);
   const [crosshairPoint, setCrosshairPoint] = useState<ChartPoint | null>(null);
   const [drawingTool, setDrawingTool] = useState<DrawingToolType>("pointer");
   const [drawings, setDrawings] = useState<DrawingItem[]>([]);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
-  const [symbolFilter, setSymbolFilter] = useState("");
+    const [symbolFilter, setSymbolFilter] = useState("");
+  const showEma = indicatorSettings.showEma;
+  const showSma = indicatorSettings.showSma;
+  const showVolume = indicatorSettings.showVolume;
+
+  useEffect(() => {
+    setIndicatorPresets(loadIndicatorPresets());
+  }, []);
 
   useEffect(() => {
     setDrawings(loadDrawings(selectedSymbol, selectedTimeframe));
@@ -539,6 +574,44 @@ export function TradingTerminal() {
     const next = [...drawings, item];
     setDrawings(next);
     saveDrawings(selectedSymbol, selectedTimeframe, next);
+  };
+
+  const handleIndicatorToggle = (key: "showEma" | "showSma" | "showRsi" | "showVolume", value: boolean) => {
+    setIndicatorSettings((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleIndicatorPeriod = (key: "emaPeriod" | "smaPeriod" | "rsiPeriod", value: string) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return;
+    setIndicatorSettings((current) => ({
+      ...current,
+      [key]: Math.min(200, Math.max(2, Math.round(numeric))),
+    }));
+  };
+
+  const handleSaveIndicatorPreset = () => {
+    const preset = createIndicatorPreset(presetName, indicatorSettings);
+    if (!preset) {
+      toast.error("Enter a name for this indicator preset");
+      return;
+    }
+    const next = [...indicatorPresets.filter((item) => item.name.toLowerCase() !== preset.name.toLowerCase()), preset];
+    setIndicatorPresets(next);
+    saveIndicatorPresets(next);
+    setPresetName("");
+    toast.success(`Preset “${preset.name}” saved`);
+  };
+
+  const handleLoadIndicatorPreset = (preset: IndicatorPreset) => {
+    setIndicatorSettings(normalizeIndicatorSettings(preset));
+    toast.success(`Preset “${preset.name}” loaded`);
+  };
+
+  const handleDeleteIndicatorPreset = (id: string) => {
+    const next = indicatorPresets.filter((item) => item.id !== id);
+    setIndicatorPresets(next);
+    saveIndicatorPresets(next);
+    toast.success("Indicator preset deleted");
   };
 
   const handleDeleteSelectedDrawing = () => {
@@ -622,14 +695,14 @@ export function TradingTerminal() {
         <div className="flex items-center gap-2"><div className="relative hidden md:block"><Search className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 text-[#64748b]" /><Input value={symbolFilter} onChange={(e) => setSymbolFilter(e.target.value)} placeholder="Search symbols" className="h-8 w-32 border-[#303744] bg-[#0f1115] pl-7 text-xs" /></div><Select value={selectedSymbol} onValueChange={(value) => { setSelectedSymbol(value); setSymbolFilter(""); }}><SelectTrigger className="h-8 w-32 border-[#303744] bg-[#0f1115] text-xs font-semibold"><SelectValue /></SelectTrigger><SelectContent>{(filteredSymbols.length ? filteredSymbols : SYMBOLS).map((symbol) => <SelectItem key={symbol} value={symbol}>{symbol}</SelectItem>)}</SelectContent></Select></div>
         <div className={`flex items-center gap-2 rounded px-2 py-1 transition-colors ${priceDirection === "up" ? "bg-[#12342e]" : priceDirection === "down" ? "bg-[#34181c]" : ""}`}><span className="text-sm font-semibold tabular-nums">{formatPrice(livePrice, selectedSymbol)}</span><span className={`text-[10px] ${changePercent >= 0 ? "text-[#26a69a]" : "text-[#ef5350]"}`}>{changePercent >= 0 ? "+" : ""}{changePercent.toFixed(2)}%</span></div>
         <div className="hidden items-center gap-1 text-[10px] text-[#7f8999] lg:flex"><span>24h</span><span className="tabular-nums">H {formatPrice(dayHigh, selectedSymbol)}</span><span className="tabular-nums">L {formatPrice(dayLow, selectedSymbol)}</span></div>
-        <div className="ml-auto flex items-center gap-1"><div className={`mr-2 hidden items-center gap-1 text-[10px] uppercase tracking-wide sm:flex ${isConnected ? "text-[#26a69a]" : "text-[#94a3b8]"}`}><span className={`h-1.5 w-1.5 rounded-full ${isConnected ? "bg-[#26a69a]" : "bg-[#94a3b8]"}`} />{isConnected ? "Binance live" : "Connecting"}</div><div className="relative"><button type="button" onClick={() => setIndicatorsOpen((open) => !open)} className={`flex items-center gap-1 rounded px-2 py-1.5 text-[10px] ${indicatorsOpen ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]"}`}><SlidersHorizontal className="h-3.5 w-3.5" /><span className="hidden sm:inline">Indicators</span><ChevronDown className="h-3 w-3" /></button>{indicatorsOpen && <div className="absolute right-0 top-9 z-30 w-48 rounded border border-[#303744] bg-[#171c23] p-2 text-[11px] shadow-2xl"><div className="mb-2 px-2 text-[10px] uppercase tracking-wide text-[#7f8999]">Overlays and panes</div><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-[#222a35]"><input type="checkbox" checked={showEma} onChange={(event) => setShowEma(event.target.checked)} className="accent-[#f59e0b]" /><span className="text-[#fbbf24]">EMA 20</span></label><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-[#222a35]"><input type="checkbox" checked={showSma} onChange={(event) => setShowSma(event.target.checked)} className="accent-[#c084fc]" /><span className="text-[#c084fc]">SMA 50</span></label><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-[#222a35]"><input type="checkbox" checked={showVolume} onChange={(event) => setShowVolume(event.target.checked)} className="accent-[#38bdf8]" /><span className="text-[#cbd5e1]">Volume</span></label></div>}</div><button type="button" onClick={() => setChartMode("candles")} className={`rounded p-1.5 ${chartMode === "candles" ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028]"}`} title="Candlestick chart"><CandlestickChart className="h-4 w-4" /></button><button type="button" onClick={() => setChartMode("line")} className={`rounded p-1.5 ${chartMode === "line" ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028]"}`} title="Line chart"><LineChart className="h-4 w-4" /></button><button type="button" onClick={toggleFullscreen} className="rounded p-1.5 text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>{isFullscreen ? <Expand className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button><button type="button" className="rounded p-1.5 text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]" title="Chart settings"><Settings2 className="h-4 w-4" /></button></div>
+        <div className="ml-auto flex items-center gap-1"><div className={`mr-2 hidden items-center gap-1 text-[10px] uppercase tracking-wide sm:flex ${isConnected ? "text-[#26a69a]" : "text-[#94a3b8]"}`}><span className={`h-1.5 w-1.5 rounded-full ${isConnected ? "bg-[#26a69a]" : "bg-[#94a3b8]"}`} />{isConnected ? "Binance live" : "Connecting"}</div><div className="relative"><button type="button" onClick={() => setIndicatorsOpen((open) => !open)} className={`flex items-center gap-1 rounded px-2 py-1.5 text-[10px] ${indicatorsOpen ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]"}`}><SlidersHorizontal className="h-3.5 w-3.5" /><span className="hidden sm:inline">Indicators</span><ChevronDown className="h-3 w-3" /></button>{indicatorsOpen && <div className="absolute right-0 top-9 z-30 w-80 max-w-[calc(100vw-1rem)] rounded border border-[#303744] bg-[#171c23] p-3 text-[11px] shadow-2xl"><div className="mb-3 flex items-center justify-between"><div><div className="text-[10px] uppercase tracking-wide text-[#7f8999]">Chart indicators</div><div className="mt-0.5 text-[10px] text-[#64748b]">Build and save a reusable combination</div></div><button type="button" onClick={() => setIndicatorsOpen(false)} className="rounded p-1 text-[#64748b] hover:bg-[#222a35] hover:text-[#e5e7eb]" title="Close indicators"><X className="h-3.5 w-3.5" /></button></div><div className="space-y-1.5"><label className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-[#222a35]"><input type="checkbox" checked={indicatorSettings.showEma} onChange={(event) => handleIndicatorToggle("showEma", event.target.checked)} className="accent-[#f59e0b]" /><span className="min-w-0 flex-1 text-[#fbbf24]">EMA</span><input aria-label="EMA period" type="number" min="2" max="200" value={indicatorSettings.emaPeriod} onChange={(event) => handleIndicatorPeriod("emaPeriod", event.target.value)} className="h-6 w-16 rounded border border-[#3a4350] bg-[#0f1115] px-1.5 text-right text-[10px] text-[#e5e7eb]" /><span className="text-[10px] text-[#64748b]">period</span></label><label className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-[#222a35]"><input type="checkbox" checked={indicatorSettings.showSma} onChange={(event) => handleIndicatorToggle("showSma", event.target.checked)} className="accent-[#c084fc]" /><span className="min-w-0 flex-1 text-[#c084fc]">SMA</span><input aria-label="SMA period" type="number" min="2" max="200" value={indicatorSettings.smaPeriod} onChange={(event) => handleIndicatorPeriod("smaPeriod", event.target.value)} className="h-6 w-16 rounded border border-[#3a4350] bg-[#0f1115] px-1.5 text-right text-[10px] text-[#e5e7eb]" /><span className="text-[10px] text-[#64748b]">period</span></label><label className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-[#222a35]"><input type="checkbox" checked={indicatorSettings.showRsi} onChange={(event) => handleIndicatorToggle("showRsi", event.target.checked)} className="accent-[#fb7185]" /><span className="min-w-0 flex-1 text-[#fb7185]">RSI</span><input aria-label="RSI period" type="number" min="2" max="200" value={indicatorSettings.rsiPeriod} onChange={(event) => handleIndicatorPeriod("rsiPeriod", event.target.value)} className="h-6 w-16 rounded border border-[#3a4350] bg-[#0f1115] px-1.5 text-right text-[10px] text-[#e5e7eb]" /><span className="text-[10px] text-[#64748b]">period</span></label><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-[#222a35]"><input type="checkbox" checked={indicatorSettings.showVolume} onChange={(event) => handleIndicatorToggle("showVolume", event.target.checked)} className="accent-[#38bdf8]" /><span className="text-[#cbd5e1]">Volume</span></label></div><div className="my-3 border-t border-[#2a303a]" /><div className="mb-2 text-[10px] uppercase tracking-wide text-[#7f8999]">Saved presets</div><div className="flex gap-1.5"><input aria-label="New indicator preset name" value={presetName} onChange={(event) => setPresetName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") handleSaveIndicatorPreset(); }} placeholder="Preset name" maxLength={40} className="h-7 min-w-0 flex-1 rounded border border-[#3a4350] bg-[#0f1115] px-2 text-[10px] text-[#e5e7eb] placeholder:text-[#64748b]" /><Button type="button" onClick={handleSaveIndicatorPreset} disabled={!presetName.trim()} className="h-7 bg-[#263241] px-2 text-[10px] text-[#e5e7eb] hover:bg-[#334155]">Save</Button></div><div className="mt-2 space-y-1">{indicatorPresets.length ? indicatorPresets.map((preset) => <div key={preset.id} className="flex items-center gap-1 rounded bg-[#0f1115] px-2 py-1.5"><button type="button" onClick={() => handleLoadIndicatorPreset(preset)} className="min-w-0 flex-1 truncate text-left text-[10px] text-[#cbd5e1] hover:text-white" title={`Load ${preset.name}`}>{preset.name}</button><button type="button" onClick={() => handleDeleteIndicatorPreset(preset.id)} className="rounded p-1 text-[#64748b] hover:bg-[#281316] hover:text-[#ff8b91]" title={`Delete ${preset.name}`}><Trash2 className="h-3 w-3" /></button></div>) : <div className="rounded bg-[#0f1115] px-2 py-2 text-[10px] text-[#64748b]">No saved presets yet.</div>}</div></div>}</div><button type="button" onClick={() => setChartMode("candles")} className={`rounded p-1.5 ${chartMode === "candles" ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028]"}`} title="Candlestick chart"><CandlestickChart className="h-4 w-4" /></button><button type="button" onClick={() => setChartMode("line")} className={`rounded p-1.5 ${chartMode === "line" ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028]"}`} title="Line chart"><LineChart className="h-4 w-4" /></button><button type="button" onClick={toggleFullscreen} className="rounded p-1.5 text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>{isFullscreen ? <Expand className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button><button type="button" className="rounded p-1.5 text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]" title="Chart settings"><Settings2 className="h-4 w-4" /></button></div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 border-b border-[#252b34] bg-[#0f1115] px-3 py-1.5 text-[10px] text-[#7f8999]"><div className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /><span>Timeframe</span></div><div className="flex items-center gap-0.5">{TIMEFRAMES.map((timeframe) => <button key={timeframe} type="button" onClick={() => setSelectedTimeframe(timeframe)} className={`rounded px-2 py-1 ${selectedTimeframe === timeframe ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028] hover:text-[#e5e7eb]"}`}>{timeframe}</button>)}</div><div className="flex items-center gap-1 border-l border-[#252b34] pl-3"><span className="hidden sm:inline">Drawings:</span><button type="button" onClick={() => setDrawingTool("pointer")} className={`rounded px-2 py-1 ${drawingTool === "pointer" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Pointer / Select"><Crosshair className="h-3.5 w-3.5" /></button><button type="button" onClick={() => setDrawingTool("horizontal")} className={`rounded px-2 py-1 ${drawingTool === "horizontal" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Horizontal Level"><Minus className="h-3.5 w-3.5" /></button>        <button type="button" onClick={() => setDrawingTool("trendline")} className={`rounded px-2 py-1 ${drawingTool === "trendline" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Trendline"><PenTool className="h-3.5 w-3.5" /></button>
         <button type="button" onClick={() => setDrawingTool("fibonacci")} className={`rounded px-2 py-1 ${drawingTool === "fibonacci" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Fibonacci Retracement & Extension"><GitCommit className="h-3.5 w-3.5" /></button>{selectedDrawingId && <button type="button" onClick={handleDeleteSelectedDrawing} className="rounded bg-[#281316] px-2 py-1 text-[#ff8b91] hover:bg-[#381a1f]" title="Delete selected drawing"><Trash2 className="h-3.5 w-3.5" /></button>}{drawings.length > 0 && <button type="button" onClick={handleClearAllDrawings} className="rounded px-2 py-1 text-[#94a3b8] hover:bg-[#1a2028] hover:text-[#f8fafc]" title="Clear all drawings">Clear</button>}</div><div className="ml-auto hidden items-center gap-3 md:flex"><span className="flex items-center gap-1"><SlidersHorizontal className="h-3.5 w-3.5" />Indicators</span><span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5 text-[#f59e0b]" />Binance spot feed</span></div></div>
 
       <div className="grid min-h-[560px] h-[clamp(560px,66vh,780px)] flex-1 grid-cols-1 gap-px bg-[#252b34] xl:grid-cols-[minmax(0,1fr)_25rem]">
-        <div className="flex min-w-0 flex-col bg-[#0f1115]"><div className="flex items-center justify-between border-b border-[#252b34] px-3 py-2 text-[10px] text-[#7f8999]"><div className="flex items-center gap-3"><span className="font-semibold text-[#e5e7eb]">{selectedSymbol} · {selectedTimeframe}</span><span className="hidden max-w-[520px] truncate sm:inline">{legendText}</span></div><div className="flex items-center gap-2"><span className="hidden sm:inline">Volume</span><BarChart3 className="h-3.5 w-3.5" /><button type="button" className="rounded p-1 hover:bg-[#1a2028]" title="Chart options"><Settings2 className="h-3.5 w-3.5" /></button></div></div><div className="min-h-0 flex-1"><PriceChart symbol={selectedSymbol} timeframe={selectedTimeframe} chartMode={chartMode} showEma={showEma} showSma={showSma} showVolume={showVolume} marketDataError={selectedMarketError?.message} onRetry={retryMarketData} onCrosshairChange={setCrosshairPoint} drawingTool={drawingTool} drawings={drawings} onAddDrawing={handleAddDrawing} selectedDrawingId={selectedDrawingId} onSelectDrawing={setSelectedDrawingId} /></div></div>
+        <div className="flex min-w-0 flex-col bg-[#0f1115]"><div className="flex items-center justify-between border-b border-[#252b34] px-3 py-2 text-[10px] text-[#7f8999]"><div className="flex items-center gap-3"><span className="font-semibold text-[#e5e7eb]">{selectedSymbol} · {selectedTimeframe}</span><span className="hidden max-w-[520px] truncate sm:inline">{legendText}</span></div><div className="flex items-center gap-2"><span className="hidden sm:inline">Volume</span><BarChart3 className="h-3.5 w-3.5" /><button type="button" className="rounded p-1 hover:bg-[#1a2028]" title="Chart options"><Settings2 className="h-3.5 w-3.5" /></button></div></div><div className="min-h-0 flex-1">          <PriceChart symbol={selectedSymbol} timeframe={selectedTimeframe} chartMode={chartMode} showEma={indicatorSettings.showEma} showSma={indicatorSettings.showSma} showVolume={indicatorSettings.showVolume} indicatorSettings={indicatorSettings} marketDataError={selectedMarketError?.message} onRetry={retryMarketData} onCrosshairChange={setCrosshairPoint} drawingTool={drawingTool} drawings={drawings} onAddDrawing={handleAddDrawing} selectedDrawingId={selectedDrawingId} onSelectDrawing={setSelectedDrawingId} /></div></div>
         <div className="min-h-0 bg-[#12151a]"><OrderPanel symbol={selectedSymbol} price={livePrice} bid={bid} ask={ask} /></div>
       </div>
 

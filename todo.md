@@ -62,3 +62,10 @@
 - [x] Add Fibonacci anchor placement, selection/deletion, and per-symbol/timeframe persistence
 - [x] Add regression tests for retracement, extension, anchor direction, and persistence behavior
 - [x] Run tests, build, visually verify the TradingTerminal, and save a checkpoint
+
+## Phase 31: Custom Indicator Presets
+- [x] Inspect current indicator state, chart series setup, and persistence conventions
+- [x] Implement indicator preset model, storage, and chart application including RSI
+- [x] Build save, load, and delete preset controls in the terminal indicators menu
+- [x] Add regression tests for preset persistence, validation, and indicator calculations
+- [x] Run tests, build, verify the terminal, and save a checkpoint

@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { loadDrawings, saveDrawings, calculateFibonacciPrices, type DrawingItem } from "./chartDrawing";
+import { calculateEma, calculateRsi, calculateSma, createIndicatorPreset, loadIndicatorPresets, normalizeIndicatorSettings, saveIndicatorPresets, type IndicatorPreset } from "./indicatorPresets";
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -47,5 +48,32 @@ describe("chart drawing and Fibonacci calculations", () => {
     expect(levelMap.get(0.5)).toBe(150);
     expect(levelMap.get(0.618)).toBe(138.2);
     expect(levelMap.get(1.0)).toBe(100);
+  });
+
+  it("persists named indicator presets and removes malformed entries", () => {
+    const preset = createIndicatorPreset("Momentum mix", {
+      showEma: true,
+      emaPeriod: 21,
+      showSma: false,
+      smaPeriod: 50,
+      showRsi: true,
+      rsiPeriod: 14,
+      showVolume: true,
+    });
+    expect(preset).not.toBeNull();
+    const saved = [preset as IndicatorPreset, { id: "", name: "  ", showEma: true } as IndicatorPreset];
+    saveIndicatorPresets(saved);
+    expect(loadIndicatorPresets()).toEqual([expect.objectContaining({ name: "Momentum mix", emaPeriod: 21, showRsi: true })]);
+    expect(createIndicatorPreset("   ", normalizeIndicatorSettings({}))).toBeNull();
+  });
+
+  it("calculates EMA, SMA, and bounded RSI values for preset indicators", () => {
+    const values = [100, 102, 101, 105, 106];
+    expect(calculateEma(values, 3)).toHaveLength(values.length);
+    expect(calculateSma(values, 3)[2]).toBeCloseTo(101);
+    const rsi = calculateRsi(values, 3);
+    expect(rsi).toHaveLength(values.length);
+    expect(rsi.every((value) => value >= 0 && value <= 100)).toBe(true);
+    expect(rsi[0]).toBe(50);
   });
 });
