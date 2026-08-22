@@ -69,3 +69,10 @@
 - [x] Build save, load, and delete preset controls in the terminal indicators menu
 - [x] Add regression tests for preset persistence, validation, and indicator calculations
 - [x] Run tests, build, verify the terminal, and save a checkpoint
+
+## Phase 32: Admin-Editable Leaderboard
+- [x] Inspect leaderboard data model, public page, and existing admin/audit patterns
+- [x] Implement an admin-only validated leaderboard update procedure with audit logging
+- [x] Build the leaderboard editor in the Admin Dashboard and refresh the public leaderboard after saves
+- [x] Add regression tests for authorization, validation, persistence, and audit behavior
+- [x] Run tests, build, verify admin and public leaderboard flows, and save a checkpoint

@@ -12,6 +12,7 @@ import AdminAuditLogPanel from "@/components/admin/AdminAuditLogPanel";
 import AdminBulkActionsPanel from "@/components/admin/AdminBulkActionsPanel";
 import AdminConfigPanel from "@/components/admin/AdminConfigPanel";
 import AdminReconciliationPanel from "@/components/admin/AdminReconciliationPanel";
+import AdminLeaderboardPanel from "@/components/admin/AdminLeaderboardPanel";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -36,7 +37,7 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="analytics" className="w-full">
-          <TabsList className="grid w-full grid-cols-9 mb-12 overflow-x-auto gap-1">
+          <TabsList className="grid w-full grid-cols-10 mb-12 overflow-x-auto gap-1">
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="deposits">Deposits</TabsTrigger>
@@ -46,6 +47,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="bulk">Bulk Actions</TabsTrigger>
             <TabsTrigger value="config">Configuration</TabsTrigger>
             <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
+            <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
           </TabsList>
 
           <TabsContent value="analytics" className="mt-8">
@@ -82,6 +84,10 @@ export default function AdminDashboard() {
 
           <TabsContent value="reconciliation" className="mt-8">
             <AdminReconciliationPanel />
+          </TabsContent>
+
+          <TabsContent value="leaderboard" className="mt-8">
+            <AdminLeaderboardPanel />
           </TabsContent>
         </Tabs>
       </div>

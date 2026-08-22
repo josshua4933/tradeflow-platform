@@ -456,6 +456,58 @@ export async function getTraderProfiles(limit = 20) {
     .limit(limit);
 }
 
+export async function getAllTraderProfilesForAdmin(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: traderProfiles.id,
+      userId: traderProfiles.userId,
+      displayName: traderProfiles.displayName,
+      bio: traderProfiles.bio,
+      avatarUrl: traderProfiles.avatarUrl,
+      isPublic: traderProfiles.isPublic,
+      allowCopying: traderProfiles.allowCopying,
+      totalTrades: traderProfiles.totalTrades,
+      winRate: traderProfiles.winRate,
+      totalProfit: traderProfiles.totalProfit,
+      monthlyReturn: traderProfiles.monthlyReturn,
+      maxDrawdown: traderProfiles.maxDrawdown,
+      followersCount: traderProfiles.followersCount,
+      createdAt: traderProfiles.createdAt,
+      updatedAt: traderProfiles.updatedAt,
+      email: users.email,
+      userName: users.name,
+    })
+    .from(traderProfiles)
+    .leftJoin(users, eq(traderProfiles.userId, users.id))
+    .orderBy(desc(traderProfiles.monthlyReturn))
+    .limit(limit);
+}
+
+export async function updateTraderProfileByAdmin(data: {
+  profileId: number;
+  displayName?: string;
+  bio?: string | null;
+  isPublic?: boolean;
+  allowCopying?: boolean;
+  totalTrades?: number;
+  winRate?: string;
+  totalProfit?: string;
+  monthlyReturn?: string;
+  maxDrawdown?: string;
+  followersCount?: number;
+}) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const before = await db.select().from(traderProfiles).where(eq(traderProfiles.id, data.profileId)).limit(1);
+  if (!before[0]) return undefined;
+  const { profileId, ...changes } = data;
+  await db.update(traderProfiles).set({ ...changes, updatedAt: new Date() }).where(eq(traderProfiles.id, profileId));
+  const after = await db.select().from(traderProfiles).where(eq(traderProfiles.id, profileId)).limit(1);
+  return { before: before[0], after: after[0] };
+}
+
 export async function getTraderProfile(userId: number) {
   const db = await getDb();
   if (!db) return undefined;

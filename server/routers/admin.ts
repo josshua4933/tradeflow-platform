@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { getDb, getWalletsByUserId, updateWalletBalance, createNotification } from "../db";
+import { getDb, getWalletsByUserId, updateWalletBalance, createNotification, getAllTraderProfilesForAdmin, updateTraderProfileByAdmin, logAudit } from "../db";
 import { users, transactions, trades, kycDocuments, auditLog, wallets } from "../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { createPalPlussWithdrawal } from "../payplus";
@@ -38,6 +38,58 @@ export const adminRouter = router({
         .offset(input?.offset ?? 0);
 
       return allUsers;
+    }),
+
+  getLeaderboardProfiles: adminProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }).optional())
+    .query(async ({ input }) => {
+      const profiles = await getAllTraderProfilesForAdmin(input?.limit ?? 100);
+      return profiles;
+    }),
+
+  updateLeaderboardProfile: adminProcedure
+    .input(
+      z.object({
+        profileId: z.number().int().positive(),
+        displayName: z.string().trim().min(2).max(64).optional(),
+        bio: z.string().trim().max(500).nullable().optional(),
+        isPublic: z.boolean().optional(),
+        allowCopying: z.boolean().optional(),
+        totalTrades: z.number().int().min(0).max(100000000).optional(),
+        winRate: z.number().finite().min(0).max(100).optional(),
+        totalProfit: z.number().finite().min(-1000000000000).max(1000000000000).optional(),
+        monthlyReturn: z.number().finite().min(-100000).max(100000).optional(),
+        maxDrawdown: z.number().finite().min(0).max(100000).optional(),
+        followersCount: z.number().int().min(0).max(100000000).optional(),
+      }).refine(
+        (value) => Object.entries(value).some(([key, entry]) => key !== "profileId" && entry !== undefined),
+        "Provide at least one leaderboard field to update",
+      ),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const changes: Parameters<typeof updateTraderProfileByAdmin>[0] = { profileId: input.profileId };
+      if (input.displayName !== undefined) changes.displayName = input.displayName;
+      if (input.bio !== undefined) changes.bio = input.bio?.trim() || null;
+      if (input.isPublic !== undefined) changes.isPublic = input.isPublic;
+      if (input.allowCopying !== undefined) changes.allowCopying = input.allowCopying;
+      if (input.totalTrades !== undefined) changes.totalTrades = input.totalTrades;
+      if (input.winRate !== undefined) changes.winRate = input.winRate.toFixed(2);
+      if (input.totalProfit !== undefined) changes.totalProfit = input.totalProfit.toFixed(8);
+      if (input.monthlyReturn !== undefined) changes.monthlyReturn = input.monthlyReturn.toFixed(4);
+      if (input.maxDrawdown !== undefined) changes.maxDrawdown = input.maxDrawdown.toFixed(4);
+      if (input.followersCount !== undefined) changes.followersCount = input.followersCount;
+
+      const result = await updateTraderProfileByAdmin(changes);
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Leaderboard profile not found" });
+
+      await logAudit({
+        userId: ctx.user.id,
+        action: "admin.update_leaderboard_profile",
+        entity: "trader_profile",
+        entityId: String(input.profileId),
+        details: { changes: { ...changes, profileId: undefined }, before: result.before, after: result.after },
+      });
+      return { success: true, profile: result.after };
     }),
 
   getWalletReconciliationReport: adminProcedure.query(async () => {
