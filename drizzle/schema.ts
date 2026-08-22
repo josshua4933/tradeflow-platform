@@ -323,3 +323,13 @@ export const userQuizScores = mysqlTable("user_quiz_scores", {
   passed: boolean("passed").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+// ─── User Certificates ────────────────────────────────────────────────────────
+export const userCertificates = mysqlTable("user_certificates", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  certificateCode: varchar("certificateCode", { length: 64 }).notNull(),
+  courseTitle: varchar("courseTitle", { length: 256 }).default("TradeFlow Professional Trading Masterclass").notNull(),
+  recipientName: varchar("recipientName", { length: 256 }).notNull(),
+  issuedAt: timestamp("issuedAt").defaultNow().notNull(),
+});

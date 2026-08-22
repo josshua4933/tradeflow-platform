@@ -10,6 +10,7 @@ import {
   kycDocuments,
   userLessonProgress,
   userQuizScores,
+  userCertificates,
   notifications,
   priceAlerts,
   referrals,
@@ -741,4 +742,37 @@ export async function saveUserQuizScore(data: {
   const db = await getDb();
   if (!db) return;
   await db.insert(userQuizScores).values(data);
+}
+
+// ─── User Certificates ────────────────────────────────────────────────────────
+export async function getUserCertificate(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const list = await db
+    .select()
+    .from(userCertificates)
+    .where(eq(userCertificates.userId, userId))
+    .limit(1);
+  return list[0] ?? null;
+}
+
+export async function createUserCertificate(data: {
+  userId: number;
+  recipientName: string;
+  courseTitle?: string;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  const existing = await getUserCertificate(data.userId);
+  if (existing) return existing;
+
+  const certificateCode = `TF-CERT-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+  const values = {
+    userId: data.userId,
+    certificateCode,
+    courseTitle: data.courseTitle ?? "TradeFlow Professional Trading Masterclass",
+    recipientName: data.recipientName,
+  };
+  await db.insert(userCertificates).values(values);
+  return getUserCertificate(data.userId);
 }

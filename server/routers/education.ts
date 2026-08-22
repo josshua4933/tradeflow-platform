@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { getEducationLesson, EDUCATION_LESSONS } from "../../shared/education";
 import {
+  getUserCertificate,
+  createUserCertificate,
   getUserLessonProgress,
   getUserQuizScores,
   saveUserQuizScore,
@@ -22,11 +24,37 @@ export const educationRouter = router({
       getUserQuizScores(ctx.user.id),
     ]);
 
+    const certificate = await getUserCertificate(ctx.user.id);
+
     return {
       lessons: EDUCATION_LESSONS,
       completedLessonIds: progress.filter((item) => item.isCompleted).map((item) => item.lessonId),
       quizScores: scores,
+      certificate,
     };
+  }),
+
+  claimCertificate: protectedProcedure.mutation(async ({ ctx }) => {
+    const [progress, existingCert] = await Promise.all([
+      getUserLessonProgress(ctx.user.id),
+      getUserCertificate(ctx.user.id),
+    ]);
+
+    if (existingCert) return existingCert;
+
+    const completedSet = new Set(progress.filter((item) => item.isCompleted).map((item) => item.lessonId));
+    const allCompleted = EDUCATION_LESSONS.every((lesson) => completedSet.has(lesson.id));
+
+    if (!allCompleted) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "You must complete all curriculum lessons before claiming your graduation certificate.",
+      });
+    }
+
+    const name = ctx.user.name ?? ctx.user.email ?? "TradeFlow Scholar";
+    const cert = await createUserCertificate({ userId: ctx.user.id, recipientName: name });
+    return cert;
   }),
 
   lesson: protectedProcedure

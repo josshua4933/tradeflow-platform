@@ -47,4 +47,11 @@
 - [x] Implement backend tRPC procedures for fetching curriculum, saving progress, and recording quiz scores
 - [x] Build interactive lesson reading view, completion toggles, quizzes with instant score feedback, and practical tool links
 - [x] Add regression tests for progress saving and quiz scoring
-- [ ] Run tests, build, verify education flows, and save a checkpoint
+- [x] Run tests, build, verify education flows, and save a checkpoint
+
+## Phase 29: Graduation Certificate & Badge System
+- [x] Add Drizzle schema table for user graduation certificates with safe migration
+- [x] Implement backend check that evaluates whether all curriculum lessons are completed before issuing a verifiable certificate
+- [x] Build the certificate modal and achievement badge component in Education
+- [x] Add regression tests for certificate unlock conditions and duplicate-issuance prevention
+- [x] Run tests, build, verify certificate generation, and save a checkpoint

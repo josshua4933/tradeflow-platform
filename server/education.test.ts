@@ -6,6 +6,8 @@ const dbMock = vi.hoisted(() => ({
   getUserQuizScores: vi.fn(),
   saveUserQuizScore: vi.fn(),
   setUserLessonProgress: vi.fn(),
+  getUserCertificate: vi.fn(),
+  createUserCertificate: vi.fn(),
 }));
 
 vi.mock("./db", () => dbMock);
@@ -26,6 +28,15 @@ describe("education router", () => {
     dbMock.getUserQuizScores.mockReset().mockResolvedValue([]);
     dbMock.saveUserQuizScore.mockReset().mockResolvedValue(undefined);
     dbMock.setUserLessonProgress.mockReset().mockResolvedValue(undefined);
+    dbMock.getUserCertificate.mockReset().mockResolvedValue(null);
+    dbMock.createUserCertificate.mockReset().mockResolvedValue({
+      id: 1,
+      userId: 42,
+      certificateCode: "TF-CERT-ABCD12",
+      courseTitle: "TradeFlow Professional Trading Masterclass",
+      recipientName: "Test Trader",
+      issuedAt: new Date(),
+    });
   });
 
   it("returns the curriculum with the current user's completion and score history", async () => {
@@ -74,5 +85,57 @@ describe("education router", () => {
     })).rejects.toThrow("Submit one answer for every quiz question");
 
     expect(dbMock.saveUserQuizScore).not.toHaveBeenCalled();
+  });
+
+  it("prevents certificate claim when lessons are incomplete", async () => {
+    dbMock.getUserLessonProgress.mockResolvedValue([
+      { lessonId: "introduction-to-forex-trading", isCompleted: true },
+    ]);
+
+    await expect(educationRouter.createCaller(makeContext()).claimCertificate()).rejects.toThrow(
+      "You must complete all curriculum lessons before claiming your graduation certificate."
+    );
+  });
+
+  it("issues a certificate successfully when all curriculum lessons are completed", async () => {
+    const allLessonIds = [
+      "introduction-to-forex-trading",
+      "leverage-and-margin",
+      "reading-candlestick-charts",
+      "risk-management-essentials",
+      "support-and-resistance",
+      "moving-averages-explained",
+      "rsi-and-momentum",
+      "fibonacci-retracements",
+      "trading-synthetic-indices",
+      "binary-and-digital-options",
+      "copy-trading-strategies",
+      "economic-calendar-trading",
+    ];
+    dbMock.getUserLessonProgress.mockResolvedValue(
+      allLessonIds.map((lessonId) => ({ lessonId, isCompleted: true }))
+    );
+
+    const cert = await educationRouter.createCaller(makeContext()).claimCertificate();
+
+    expect(cert).toMatchObject({ certificateCode: "TF-CERT-ABCD12", recipientName: "Test Trader" });
+    expect(dbMock.createUserCertificate).toHaveBeenCalledWith({ userId: 42, recipientName: "TradeFlow Scholar" });
+  });
+
+  it("prevents duplicate issuance by returning an existing certificate", async () => {
+    const existing = {
+      id: 5,
+      userId: 42,
+      certificateCode: "TF-CERT-EXISTING",
+      courseTitle: "TradeFlow Professional Trading Masterclass",
+      recipientName: "Test Trader",
+      issuedAt: new Date(),
+    };
+    dbMock.getUserCertificate.mockResolvedValue(existing);
+
+    const cert = await educationRouter.createCaller(makeContext()).claimCertificate();
+
+    expect(cert).toEqual(existing);
+    expect(dbMock.createUserCertificate).not.toHaveBeenCalled();
   });
 });
