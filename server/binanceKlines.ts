@@ -1,4 +1,5 @@
 import axios from "axios";
+import { BINANCE_HTTPS_AGENT } from "./binanceTransport";
 import WebSocket from "ws";
 import { getWebSocket } from "./websocket";
 
@@ -89,6 +90,7 @@ export async function getBinanceKlines(
     const response = await axios.get(`${BINANCE_REST_URL}/klines`, {
       params: { symbol: binanceSymbol, interval, limit: Math.min(Math.max(limit, 10), 1000) },
       timeout: 7000,
+      httpsAgent: BINANCE_HTTPS_AGENT,
     });
 
     return response.data.map((row: [number, string, string, string, string, string]) => ({

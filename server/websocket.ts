@@ -55,14 +55,15 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
       }
 
       try {
-        const { subscribeToKlines } = await import("./binanceKlines");
+        const { subscribeToKlines, isKlinesConnected } = await import("./binanceKlines");
         const subscribed = subscribeToKlines(data.symbol, data.interval ?? "1m");
         if (!subscribed) {
+          const { getKlineSubscriptionErrorMessage } = await import("./websocket.helpers");
           socket.emit("market_data_error", {
             type: "klines",
             symbol: data.symbol,
             interval: data.interval ?? "1m",
-            message: "This symbol is not available on Binance spot markets.",
+            message: getKlineSubscriptionErrorMessage(isKlinesConnected()),
           });
         }
       } catch (error) {

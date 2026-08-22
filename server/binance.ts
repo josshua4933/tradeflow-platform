@@ -1,4 +1,5 @@
 import axios from "axios";
+import { BINANCE_HTTPS_AGENT } from "./binanceTransport";
 
 // Market-data-only endpoint avoids Binance account/API restrictions while preserving public prices.
 const BINANCE_API_BASE = "https://data-api.binance.vision/api/v3";
@@ -45,6 +46,7 @@ export async function getBinancePrice(symbol: string): Promise<MarketPrice | nul
     const response = await axios.get(`${BINANCE_API_BASE}/ticker/24hr`, {
       params: { symbol: binanceSymbol },
       timeout: 5000,
+      httpsAgent: BINANCE_HTTPS_AGENT,
     });
 
     const data = response.data;

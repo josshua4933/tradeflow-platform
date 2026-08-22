@@ -76,3 +76,13 @@
 - [x] Build the leaderboard editor in the Admin Dashboard and refresh the public leaderboard after saves
 - [x] Add regression tests for authorization, validation, persistence, and audit behavior
 - [x] Run tests, build, verify admin and public leaderboard flows, and save a checkpoint
+
+## Phase 33: End-to-End Platform Audit & Verification
+- [x] Run static TypeScript check (`pnpm check`) and full automated test suite (`pnpm test`)
+- [x] Run production bundle build (`pnpm build`) and inspect `.manus-logs/devserver.log` for runtime errors
+- [x] Visually verify core authenticated routes (`/`, `/trade`, `/admin`, `/wallets`, `/calendar`, `/education`, `/leaderboard`)
+- [x] Compile comprehensive verification audit report with prioritized recommendations
+- [x] Fix the Admin Dashboard unauthenticated/standard-user state so it does not remain on an indefinite data spinner
+- [x] Correct the Trading Terminal message when the Binance candle stream is temporarily unavailable
+- [x] Re-run an authenticated visual audit for `/trade`, `/wallets`, `/calendar`, `/education`, and `/leaderboard` and record route-specific outcomes
+- [x] Confirm authenticated `/trade` fallback behavior while the Binance stream is degraded

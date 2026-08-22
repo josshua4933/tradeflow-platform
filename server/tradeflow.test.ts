@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { getBinanceKlines } from "./binanceKlines";
+import axios from "axios";
 
 vi.mock("./binanceStream", () => ({
   getLatestBinancePrice: vi.fn((symbol: string) => symbol.toUpperCase() === "BTCUSD" ? 65432.1 : null),
@@ -497,14 +498,29 @@ describe("palpluss", () => {
 
 
 describe("live market candles", () => {
-  it("returns renderable BTCUSD candles from Binance market data", async () => {
-    const candles = await getBinanceKlines("BTCUSD", "1m", 10);
-    expect(candles).not.toBeNull();
-    expect(candles?.length).toBeGreaterThanOrEqual(10);
-    const candle = candles?.[0];
-    expect(candle?.time).toBeGreaterThan(1_000_000_000);
-    expect([candle?.open, candle?.high, candle?.low, candle?.close, candle?.volume].every(Number.isFinite)).toBe(true);
-  }, 15_000);
+  it("maps Binance candle rows into renderable BTCUSD candles", async () => {
+    const getSpy = vi.spyOn(axios, "get").mockResolvedValueOnce({
+      data: Array.from({ length: 10 }, (_, index) => [
+        1_700_000_000_000 + index * 60_000,
+        "65000.10",
+        "65100.20",
+        "64900.30",
+        "65050.40",
+        "12.5",
+      ]),
+    } as any);
+
+    try {
+      const candles = await getBinanceKlines("BTCUSD", "1m", 10);
+      expect(candles).not.toBeNull();
+      expect(candles?.length).toBe(10);
+      const candle = candles?.[0];
+      expect(candle?.time).toBe(1_700_000_000);
+      expect([candle?.open, candle?.high, candle?.low, candle?.close, candle?.volume].every(Number.isFinite)).toBe(true);
+    } finally {
+      getSpy.mockRestore();
+    }
+  });
 });
 
 

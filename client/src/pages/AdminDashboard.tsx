@@ -1,8 +1,9 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2, LockKeyhole, LogIn } from "lucide-react";
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel";
 import AdminDepositsPanel from "@/components/admin/AdminDepositsPanel";
 import AdminWithdrawalsPanel from "@/components/admin/AdminWithdrawalsPanel";
@@ -13,10 +14,45 @@ import AdminBulkActionsPanel from "@/components/admin/AdminBulkActionsPanel";
 import AdminConfigPanel from "@/components/admin/AdminConfigPanel";
 import AdminReconciliationPanel from "@/components/admin/AdminReconciliationPanel";
 import AdminLeaderboardPanel from "@/components/admin/AdminLeaderboardPanel";
+import { getAdminAccessMessage, getAdminAccessState } from "./adminAccess";
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
+  const accessState = getAdminAccessState({
+    loading,
+    isAuthenticated,
+    role: user?.role,
+  });
+
+  if (accessState === "loading") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-label="Loading administrator access" />
+      </div>
+    );
+  }
+
+  if (accessState !== "allowed") {
+    const isUnauthenticated = accessState === "unauthenticated";
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-lg border bg-card p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+            {isUnauthenticated ? <LogIn className="h-6 w-6" /> : <LockKeyhole className="h-6 w-6" />}
+          </div>
+          <h1 className="text-2xl font-serif font-bold text-foreground">Administrator access required</h1>
+          <p className="mt-3 text-sm text-muted-foreground">{getAdminAccessMessage(accessState)}</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Button variant="outline" onClick={() => navigate("/")}>Back to Dashboard</Button>
+            {isUnauthenticated && (
+              <Button onClick={() => { window.location.href = getLoginUrl(); }}>Sign in</Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
