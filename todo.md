@@ -55,3 +55,10 @@
 - [x] Build the certificate modal and achievement badge component in Education
 - [x] Add regression tests for certificate unlock conditions and duplicate-issuance prevention
 - [x] Run tests, build, verify certificate generation, and save a checkpoint
+
+## Phase 30: Fibonacci Drawing Tools
+- [x] Inspect current drawing tool types, persistence, coordinate mapping, and toolbar rendering
+- [x] Implement Fibonacci retracement and extension level calculations and rendering
+- [x] Add Fibonacci anchor placement, selection/deletion, and per-symbol/timeframe persistence
+- [x] Add regression tests for retracement, extension, anchor direction, and persistence behavior
+- [x] Run tests, build, visually verify the TradingTerminal, and save a checkpoint

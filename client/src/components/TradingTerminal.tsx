@@ -33,6 +33,7 @@ import {
   PenTool,
   Minus,
   Trash2,
+  GitCommit,
 } from "lucide-react";
 import { coordinateToTimePrice, loadDrawings, saveDrawings, type DrawingToolType, type DrawingItem } from "./chartDrawing";
 import { ChartDrawingOverlay } from "./ChartDrawingOverlay";
@@ -91,6 +92,8 @@ function PriceChart({
   const smaSeriesRef = useRef<any>(null);
   const crosshairCallbackRef = useRef(onCrosshairChange);
   crosshairCallbackRef.current = onCrosshairChange;
+  const drawingToolRef = useRef(drawingTool);
+  drawingToolRef.current = drawingTool;
   const { candles: wsCandles, subscribeToCandles, getCandle } = useWebSocketContext();
   const liveCandle = getCandle(symbol, timeframe);
   const { data: candles, isLoading, isError } = trpc.market.candles.useQuery(
@@ -187,6 +190,47 @@ function PriceChart({
     };
     chart.subscribeCrosshairMove(handleCrosshairMove);
 
+    const handleClick = (param: any) => {
+      const tp = coordinateToTimePrice(param, chart, candleSeries);
+      if (!tp) return;
+
+      const tool = drawingToolRef.current;
+      if (tool === "horizontal") {
+        const item: DrawingItem = {
+          id: `draw-${Date.now()}`,
+          type: "horizontal",
+          symbol,
+          timeframe,
+          p1: tp,
+          color: "#f59e0b",
+        };
+        onAddDrawing(item);
+        onSelectDrawing(item.id);
+        toast.success("Horizontal level added");
+      } else if (tool === "trendline" || tool === "fibonacci") {
+        if (!pendingTrendlineRef.current) {
+          pendingTrendlineRef.current = { p1: tp };
+          toast.info(`Set second point for ${tool === "fibonacci" ? "Fibonacci Retracement" : "Trendline"}`);
+        } else {
+          const p1 = pendingTrendlineRef.current.p1;
+          pendingTrendlineRef.current = null;
+          const item: DrawingItem = {
+            id: `draw-${Date.now()}`,
+            type: tool,
+            symbol,
+            timeframe,
+            p1,
+            p2: tp,
+            color: tool === "fibonacci" ? "#38bdf8" : "#26a69a",
+          };
+          onAddDrawing(item);
+          onSelectDrawing(item.id);
+          toast.success(tool === "fibonacci" ? "Fibonacci levels added" : "Trendline added");
+        }
+      }
+    };
+    chart.subscribeClick(handleClick);
+
     chartInstance.current = chart;
     candleSeriesRef.current = candleSeries;
     lineSeriesRef.current = lineSeries;
@@ -208,6 +252,7 @@ function PriceChart({
       resizeObserver.disconnect();
       window.removeEventListener("resize", handleResize);
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
+      chart.unsubscribeClick(handleClick);
       crosshairCallbackRef.current(null);
       chart.remove();
       chartInstance.current = null;
@@ -285,6 +330,13 @@ function PriceChart({
   return (
     <div className="relative h-full min-h-[520px] w-full bg-[#0f1115]">
       <div ref={chartRef} className="absolute inset-0" />
+      <ChartDrawingOverlay
+        drawings={drawings}
+        chart={chartInstance.current}
+        series={candleSeriesRef.current}
+        onSelectDrawing={onSelectDrawing}
+        selectedId={selectedDrawingId}
+      />
       {(isLoading || isError) && !candles?.length && !liveCandle && (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-[#8d96a5] pointer-events-none">
           {isError ? "Waiting for Binance market data…" : "Loading live Binance candles…"}
@@ -573,7 +625,8 @@ export function TradingTerminal() {
         <div className="ml-auto flex items-center gap-1"><div className={`mr-2 hidden items-center gap-1 text-[10px] uppercase tracking-wide sm:flex ${isConnected ? "text-[#26a69a]" : "text-[#94a3b8]"}`}><span className={`h-1.5 w-1.5 rounded-full ${isConnected ? "bg-[#26a69a]" : "bg-[#94a3b8]"}`} />{isConnected ? "Binance live" : "Connecting"}</div><div className="relative"><button type="button" onClick={() => setIndicatorsOpen((open) => !open)} className={`flex items-center gap-1 rounded px-2 py-1.5 text-[10px] ${indicatorsOpen ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]"}`}><SlidersHorizontal className="h-3.5 w-3.5" /><span className="hidden sm:inline">Indicators</span><ChevronDown className="h-3 w-3" /></button>{indicatorsOpen && <div className="absolute right-0 top-9 z-30 w-48 rounded border border-[#303744] bg-[#171c23] p-2 text-[11px] shadow-2xl"><div className="mb-2 px-2 text-[10px] uppercase tracking-wide text-[#7f8999]">Overlays and panes</div><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-[#222a35]"><input type="checkbox" checked={showEma} onChange={(event) => setShowEma(event.target.checked)} className="accent-[#f59e0b]" /><span className="text-[#fbbf24]">EMA 20</span></label><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-[#222a35]"><input type="checkbox" checked={showSma} onChange={(event) => setShowSma(event.target.checked)} className="accent-[#c084fc]" /><span className="text-[#c084fc]">SMA 50</span></label><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-[#222a35]"><input type="checkbox" checked={showVolume} onChange={(event) => setShowVolume(event.target.checked)} className="accent-[#38bdf8]" /><span className="text-[#cbd5e1]">Volume</span></label></div>}</div><button type="button" onClick={() => setChartMode("candles")} className={`rounded p-1.5 ${chartMode === "candles" ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028]"}`} title="Candlestick chart"><CandlestickChart className="h-4 w-4" /></button><button type="button" onClick={() => setChartMode("line")} className={`rounded p-1.5 ${chartMode === "line" ? "bg-[#263241] text-[#e5e7eb]" : "text-[#7f8999] hover:bg-[#1a2028]"}`} title="Line chart"><LineChart className="h-4 w-4" /></button><button type="button" onClick={toggleFullscreen} className="rounded p-1.5 text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>{isFullscreen ? <Expand className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button><button type="button" className="rounded p-1.5 text-[#7f8999] hover:bg-[#1a2028] hover:text-[#e5e7eb]" title="Chart settings"><Settings2 className="h-4 w-4" /></button></div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 border-b border-[#252b34] bg-[#0f1115] px-3 py-1.5 text-[10px] text-[#7f8999]"><div className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /><span>Timeframe</span></div><div className="flex items-center gap-0.5">{TIMEFRAMES.map((timeframe) => <button key={timeframe} type="button" onClick={() => setSelectedTimeframe(timeframe)} className={`rounded px-2 py-1 ${selectedTimeframe === timeframe ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028] hover:text-[#e5e7eb]"}`}>{timeframe}</button>)}</div><div className="flex items-center gap-1 border-l border-[#252b34] pl-3"><span className="hidden sm:inline">Drawings:</span><button type="button" onClick={() => setDrawingTool("pointer")} className={`rounded px-2 py-1 ${drawingTool === "pointer" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Pointer / Select"><Crosshair className="h-3.5 w-3.5" /></button><button type="button" onClick={() => setDrawingTool("horizontal")} className={`rounded px-2 py-1 ${drawingTool === "horizontal" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Horizontal Level"><Minus className="h-3.5 w-3.5" /></button><button type="button" onClick={() => setDrawingTool("trendline")} className={`rounded px-2 py-1 ${drawingTool === "trendline" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Trendline"><PenTool className="h-3.5 w-3.5" /></button>{selectedDrawingId && <button type="button" onClick={handleDeleteSelectedDrawing} className="rounded bg-[#281316] px-2 py-1 text-[#ff8b91] hover:bg-[#381a1f]" title="Delete selected drawing"><Trash2 className="h-3.5 w-3.5" /></button>}{drawings.length > 0 && <button type="button" onClick={handleClearAllDrawings} className="rounded px-2 py-1 text-[#94a3b8] hover:bg-[#1a2028] hover:text-[#f8fafc]" title="Clear all drawings">Clear</button>}</div><div className="ml-auto hidden items-center gap-3 md:flex"><span className="flex items-center gap-1"><SlidersHorizontal className="h-3.5 w-3.5" />Indicators</span><span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5 text-[#f59e0b]" />Binance spot feed</span></div></div>
+      <div className="flex flex-wrap items-center gap-4 border-b border-[#252b34] bg-[#0f1115] px-3 py-1.5 text-[10px] text-[#7f8999]"><div className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /><span>Timeframe</span></div><div className="flex items-center gap-0.5">{TIMEFRAMES.map((timeframe) => <button key={timeframe} type="button" onClick={() => setSelectedTimeframe(timeframe)} className={`rounded px-2 py-1 ${selectedTimeframe === timeframe ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028] hover:text-[#e5e7eb]"}`}>{timeframe}</button>)}</div><div className="flex items-center gap-1 border-l border-[#252b34] pl-3"><span className="hidden sm:inline">Drawings:</span><button type="button" onClick={() => setDrawingTool("pointer")} className={`rounded px-2 py-1 ${drawingTool === "pointer" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Pointer / Select"><Crosshair className="h-3.5 w-3.5" /></button><button type="button" onClick={() => setDrawingTool("horizontal")} className={`rounded px-2 py-1 ${drawingTool === "horizontal" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Horizontal Level"><Minus className="h-3.5 w-3.5" /></button>        <button type="button" onClick={() => setDrawingTool("trendline")} className={`rounded px-2 py-1 ${drawingTool === "trendline" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Trendline"><PenTool className="h-3.5 w-3.5" /></button>
+        <button type="button" onClick={() => setDrawingTool("fibonacci")} className={`rounded px-2 py-1 ${drawingTool === "fibonacci" ? "bg-[#263241] text-[#f8fafc]" : "hover:bg-[#1a2028]"}`} title="Fibonacci Retracement & Extension"><GitCommit className="h-3.5 w-3.5" /></button>{selectedDrawingId && <button type="button" onClick={handleDeleteSelectedDrawing} className="rounded bg-[#281316] px-2 py-1 text-[#ff8b91] hover:bg-[#381a1f]" title="Delete selected drawing"><Trash2 className="h-3.5 w-3.5" /></button>}{drawings.length > 0 && <button type="button" onClick={handleClearAllDrawings} className="rounded px-2 py-1 text-[#94a3b8] hover:bg-[#1a2028] hover:text-[#f8fafc]" title="Clear all drawings">Clear</button>}</div><div className="ml-auto hidden items-center gap-3 md:flex"><span className="flex items-center gap-1"><SlidersHorizontal className="h-3.5 w-3.5" />Indicators</span><span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5 text-[#f59e0b]" />Binance spot feed</span></div></div>
 
       <div className="grid min-h-[560px] h-[clamp(560px,66vh,780px)] flex-1 grid-cols-1 gap-px bg-[#252b34] xl:grid-cols-[minmax(0,1fr)_25rem]">
         <div className="flex min-w-0 flex-col bg-[#0f1115]"><div className="flex items-center justify-between border-b border-[#252b34] px-3 py-2 text-[10px] text-[#7f8999]"><div className="flex items-center gap-3"><span className="font-semibold text-[#e5e7eb]">{selectedSymbol} · {selectedTimeframe}</span><span className="hidden max-w-[520px] truncate sm:inline">{legendText}</span></div><div className="flex items-center gap-2"><span className="hidden sm:inline">Volume</span><BarChart3 className="h-3.5 w-3.5" /><button type="button" className="rounded p-1 hover:bg-[#1a2028]" title="Chart options"><Settings2 className="h-3.5 w-3.5" /></button></div></div><div className="min-h-0 flex-1"><PriceChart symbol={selectedSymbol} timeframe={selectedTimeframe} chartMode={chartMode} showEma={showEma} showSma={showSma} showVolume={showVolume} marketDataError={selectedMarketError?.message} onRetry={retryMarketData} onCrosshairChange={setCrosshairPoint} drawingTool={drawingTool} drawings={drawings} onAddDrawing={handleAddDrawing} selectedDrawingId={selectedDrawingId} onSelectDrawing={setSelectedDrawingId} /></div></div>

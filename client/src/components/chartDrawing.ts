@@ -1,14 +1,24 @@
-export type DrawingToolType = "pointer" | "horizontal" | "trendline";
+export type DrawingToolType = "pointer" | "horizontal" | "trendline" | "fibonacci";
 
 export type DrawingItem = {
   id: string;
-  type: "horizontal" | "trendline";
+  type: "horizontal" | "trendline" | "fibonacci";
   symbol: string;
   timeframe: string;
   p1: { time: number; price: number };
   p2?: { time: number; price: number };
   color: string;
 };
+
+export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.618, 2.618];
+
+export function calculateFibonacciPrices(p1Price: number, p2Price: number): Array<{ ratio: number; price: number }> {
+  const diff = p2Price - p1Price;
+  return FIB_LEVELS.map((ratio) => ({
+    ratio,
+    price: p1Price + diff * ratio,
+  }));
+}
 
 export function coordinateToTimePrice(
   param: { time?: unknown; point?: { x: number; y: number } },
