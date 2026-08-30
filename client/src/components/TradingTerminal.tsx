@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -691,7 +692,7 @@ export function TradingTerminal() {
   return (
     <div ref={terminalRef} className="flex min-h-[calc(100dvh-8rem)] w-full min-w-0 flex-col overflow-hidden border-y border-[#252b34] bg-[#0b0d10] text-[#e5e7eb]">
       <div className="flex flex-wrap items-center gap-2 border-b border-[#252b34] bg-[#12151a] px-3 py-2">
-        <div className="flex items-center gap-2 border-r border-[#2a303a] pr-3"><div className="flex h-7 w-7 items-center justify-center rounded bg-[#1d2733] text-[#38bdf8]"><BarChart2 className="h-4 w-4" /></div><div className="hidden sm:block"><div className="text-[11px] font-semibold">TradeFlow Pro</div><div className="text-[9px] text-[#7f8999]">Advanced charting terminal</div></div></div>
+        <div className="flex items-center gap-2 border-r border-[#2a303a] pr-3"><BrandMark size="sm" tone="dark" showWordmark={false} /><div className="hidden sm:block"><div className="text-[11px] font-semibold text-[#f1f5f9]">TradeFlow Pro</div><div className="text-[9px] text-[#7f8999]">Precision trading terminal</div></div></div>
         <div className="flex items-center gap-2"><div className="relative hidden md:block"><Search className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 text-[#64748b]" /><Input value={symbolFilter} onChange={(e) => setSymbolFilter(e.target.value)} placeholder="Search symbols" className="h-8 w-32 border-[#303744] bg-[#0f1115] pl-7 text-xs" /></div><Select value={selectedSymbol} onValueChange={(value) => { setSelectedSymbol(value); setSymbolFilter(""); }}><SelectTrigger className="h-8 w-32 border-[#303744] bg-[#0f1115] text-xs font-semibold"><SelectValue /></SelectTrigger><SelectContent>{(filteredSymbols.length ? filteredSymbols : SYMBOLS).map((symbol) => <SelectItem key={symbol} value={symbol}>{symbol}</SelectItem>)}</SelectContent></Select></div>
         <div className={`flex items-center gap-2 rounded px-2 py-1 transition-colors ${priceDirection === "up" ? "bg-[#12342e]" : priceDirection === "down" ? "bg-[#34181c]" : ""}`}><span className="text-sm font-semibold tabular-nums">{formatPrice(livePrice, selectedSymbol)}</span><span className={`text-[10px] ${changePercent >= 0 ? "text-[#26a69a]" : "text-[#ef5350]"}`}>{changePercent >= 0 ? "+" : ""}{changePercent.toFixed(2)}%</span></div>
         <div className="hidden items-center gap-1 text-[10px] text-[#7f8999] lg:flex"><span>24h</span><span className="tabular-nums">H {formatPrice(dayHigh, selectedSymbol)}</span><span className="tabular-nums">L {formatPrice(dayLow, selectedSymbol)}</span></div>

@@ -15,6 +15,7 @@ import AdminConfigPanel from "@/components/admin/AdminConfigPanel";
 import AdminReconciliationPanel from "@/components/admin/AdminReconciliationPanel";
 import AdminLeaderboardPanel from "@/components/admin/AdminLeaderboardPanel";
 import { getAdminAccessMessage, getAdminAccessState } from "./adminAccess";
+import { BrandMark } from "@/components/BrandMark";
 
 export default function AdminDashboard() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -38,6 +39,7 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-md rounded-lg border bg-card p-8 text-center shadow-sm">
+          <div className="mb-6 flex justify-center"><BrandMark size="md" /></div>
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             {isUnauthenticated ? <LogIn className="h-6 w-6" /> : <LockKeyhole className="h-6 w-6" />}
           </div>
@@ -56,8 +58,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-12">
+      <div className="container mx-auto px-4 py-8">
         <div className="mb-12">
+          <BrandMark size="md" className="mb-8" />
           <Button
             variant="ghost"
             size="sm"

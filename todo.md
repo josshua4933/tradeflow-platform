@@ -86,3 +86,12 @@
 - [x] Correct the Trading Terminal message when the Binance candle stream is temporarily unavailable
 - [x] Re-run an authenticated visual audit for `/trade`, `/wallets`, `/calendar`, `/education`, and `/leaderboard` and record route-specific outcomes
 - [x] Confirm authenticated `/trade` fallback behavior while the Binance stream is degraded
+
+## Phase 34: TradeFlow Brand Identity
+- [x] Define a distinctive brand direction for TradeFlow, including palette, typography, tone, and logo usage
+- [x] Generate and upload scalable TradeFlow logo assets with a transparent mark and favicon treatment
+- [x] Apply the brand system across app metadata, navigation, dashboard chrome, and key public-facing surfaces
+- [x] Add the TradeFlow brand mark to the actual Admin Dashboard header and access states
+- [x] Verify branded desktop/mobile screens and run TypeScript checks, tests, and production build
+- [x] Verify the generated logo and branded desktop/mobile screens after implementation
+- [x] Run TypeScript checks, tests, and production build for the brand refresh

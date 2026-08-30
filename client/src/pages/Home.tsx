@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/BrandMark";
 import { Badge } from "@/components/ui/badge";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
@@ -90,11 +91,8 @@ export default function Home() {
       <nav className="border-b border-border">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <a href="/" className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-foreground flex items-center justify-center">
-                <span className="text-background text-xs font-bold">TF</span>
-              </div>
-              <span className="font-serif text-lg font-semibold tracking-tight">TradeFlow</span>
+            <a href="/" aria-label="TradeFlow home">
+              <BrandMark size="md" />
             </a>
             <div className="hidden md:flex items-center gap-6">
               {["Markets", "Products", "Education", "About"].map((item) => (
@@ -128,7 +126,7 @@ export default function Home() {
             <div className="flex items-center gap-3 mb-8">
               <div className="h-px w-8 bg-foreground/30"></div>
               <span className="text-xs tracking-[0.2em] uppercase text-muted-foreground font-medium">
-                Professional Trading Platform
+                Precision in motion · multi-asset trading
               </span>
             </div>
 
@@ -142,8 +140,8 @@ export default function Home() {
             </h1>
 
             <p className="text-lg text-muted-foreground leading-relaxed mb-8 max-w-md">
-              Access Forex, Crypto, Commodities, Stocks, and Synthetic Indices through
-              a platform built for precision, speed, and intelligence.
+              Move across Forex, Crypto, Commodities, Stocks, and Synthetic Indices with
+              a platform built for precision, speed, and disciplined decision-making.
             </p>
 
             <div className="flex items-center gap-4 mb-10">

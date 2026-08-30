@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/BrandMark";
 import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, TrendingUp, Wallet, History, Users, Zap,
@@ -139,11 +140,8 @@ export default function TradingLayout({ children }: { children: React.ReactNode 
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
 
-        <a href="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-6 h-6 bg-foreground flex items-center justify-center">
-            <span className="text-background text-xs font-bold">TF</span>
-          </div>
-          <span className="font-serif text-base font-semibold tracking-tight hidden sm:block">TradeFlow</span>
+        <a href="/" className="shrink-0" aria-label="TradeFlow home">
+          <BrandMark size="sm" />
         </a>
 
         <div className="flex-1" />
